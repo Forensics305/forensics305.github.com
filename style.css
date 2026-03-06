@@ -1,0 +1,626 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #0c0c0c;
+  --bg-card:     #161616;
+  --bg-card2:    #1e1e1e;
+  --border:      #2a2a2a;
+  --accent:      #b91c1c;
+  --accent-dark: #7f1d1d;
+  --accent-glow: rgba(185, 28, 28, 0.35);
+  --gold:        #c8a84b;
+  --text:        #e5ddd0;
+  --text-dim:    #7a7060;
+  --text-muted:  #4a4540;
+  --success:     #16a34a;
+  --success-bg:  #14532d22;
+  --danger:      #b91c1c;
+  --danger-bg:   #7f1d1d22;
+  --shadow:      0 8px 40px rgba(0,0,0,0.7);
+  --radius:      10px;
+}
+
+html { font-size: 16px; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Crimson Text', Georgia, serif;
+  font-size: 1.1rem;
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.screen { display: none; width: 100%; min-height: 100vh; padding: 2rem 1rem 4rem; }
+.screen.active { display: flex; flex-direction: column; align-items: center; }
+
+.container {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+.container-wide { max-width: 760px; }
+
+.logo-block {
+  text-align: center;
+  padding-top: 2rem;
+}
+.logo-dagger { font-size: 3rem; margin-bottom: 0.4rem; }
+.game-title {
+  font-family: 'Cinzel', serif;
+  font-size: 2.2rem;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--gold);
+  text-shadow: 0 0 30px rgba(200,168,75,0.4);
+}
+.game-subtitle {
+  font-family: 'Cinzel', serif;
+  font-size: 0.9rem;
+  letter-spacing: 0.3em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-top: 0.25rem;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2rem;
+  width: 100%;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+.wide-card { max-width: 760px; }
+
+.card h2 {
+  font-family: 'Cinzel', serif;
+  font-size: 1.3rem;
+  color: var(--gold);
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.7rem;
+}
+
+input[type="text"],
+input[type="password"] {
+  background: #111;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: 'Crimson Text', serif;
+  font-size: 1.15rem;
+  padding: 0.65rem 1rem;
+  width: 100%;
+  transition: border-color 0.2s;
+  outline: none;
+}
+input[type="text"]:focus,
+input[type="password"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+input::placeholder { color: var(--text-muted); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: 'Cinzel', serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.65rem 1.4rem;
+  transition: filter 0.15s, transform 0.1s;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-1px); }
+.btn:active:not(:disabled) { transform: translateY(0); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-primary  { background: var(--accent); color: #fff; }
+.btn-outline  { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn-outline:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+.btn-danger   { background: var(--danger); color: #fff; }
+.btn-text     { background: transparent; color: var(--text-dim); font-size: 0.8rem; padding: 0.4rem 0.6rem; }
+.btn-text:hover { color: var(--text); }
+.btn-sm  { font-size: 0.72rem; padding: 0.35rem 0.75rem; }
+.btn-xs  { font-size: 0.65rem; padding: 0.25rem 0.55rem; }
+.btn-lg  { font-size: 0.95rem; padding: 0.85rem 2rem; width: 100%; margin-top: 0.5rem; }
+.btn-copy { background: var(--bg-card2); color: var(--text-dim); border: 1px solid var(--border); }
+
+.btn-group {
+  display: flex;
+  gap: 0.75rem;
+}
+.btn-group .btn { flex: 1; }
+
+.error-msg {
+  color: #f87171;
+  font-size: 0.9rem;
+  text-align: center;
+  display: none;
+  min-height: 1.2rem;
+}
+.hint-text {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  text-align: center;
+}
+.status-text {
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  text-align: center;
+}
+.section-hint {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.room-code-box {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #0f0f0f;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+}
+.room-code-label {
+  font-family: 'Cinzel', serif;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+.room-code {
+  font-family: 'Cinzel', serif;
+  font-size: 1.7rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: var(--gold);
+  flex: 1;
+  text-align: center;
+}
+.player-count-bar {
+  font-size: 0.95rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+.room-tag {
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.host-mode-toggle {
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--text);
+  user-select: none;
+}
+.toggle-label input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--gold);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.toggle-hint {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-left: 1.6rem;
+}
+
+.player-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.player-list.small .player-tag { padding: 0.4rem 0.75rem; font-size: 0.9rem; }
+
+.player-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.55rem 0.9rem;
+}
+.player-name {
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.badge {
+  background: var(--gold);
+  color: #000;
+  font-family: 'Cinzel', serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+.player-tags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.player-tag {
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.spinner-wrap { display: flex; justify-content: center; padding: 1.5rem 0; }
+.spinner {
+  width: 42px;
+  height: 42px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.role-card { text-align: center; }
+.role-icon { font-size: 4rem; margin: 0.5rem 0; }
+.role-title {
+  font-family: 'Cinzel', serif;
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+}
+.murderer-role { color: var(--accent); text-shadow: 0 0 20px var(--accent-glow); }
+.innocent-role { color: #60a5fa; }
+.role-desc { color: var(--text-dim); line-height: 1.7; font-size: 1rem; }
+
+.round-budget-bar {
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.55rem 1rem;
+  font-family: 'Cinzel', serif;
+  font-size: 0.85rem;
+  color: var(--gold);
+  text-align: center;
+  letter-spacing: 0.06em;
+}
+.murder-section { border-top: 1px solid var(--border); padding-top: 1.2rem; }
+.murder-section h3 {
+  font-family: 'Cinzel', serif;
+  font-size: 1rem;
+  color: var(--text);
+  margin-bottom: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+/* OPTION GRIDS */
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.5rem;
+}
+.option-item {
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.65rem 0.5rem;
+  text-align: center;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+.option-item:hover { border-color: var(--accent); background: #1f1010; }
+.option-item.selected {
+  border-color: var(--accent);
+  background: var(--danger-bg);
+  color: #fca5a5;
+  font-weight: 600;
+}
+
+/* SUPPLIES GRID */
+.supplies-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 0.55rem;
+}
+.supply-item {
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+.supply-item:hover:not(.disabled) { border-color: var(--accent); background: #1a0f0f; }
+.supply-item.selected {
+  border-color: var(--accent);
+  background: var(--danger-bg);
+}
+.supply-item.disabled { opacity: 0.35; cursor: not-allowed; }
+.supply-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.2rem; }
+.supply-cost { color: var(--gold); font-family: 'Cinzel', serif; font-size: 0.8rem; font-weight: 700; }
+.supply-desc { color: var(--text-dim); font-size: 0.8rem; margin-top: 0.2rem; }
+.budget-line {
+  font-family: 'Cinzel', serif;
+  font-size: 0.9rem;
+  color: var(--gold);
+  text-align: right;
+  padding-top: 0.4rem;
+}
+
+.crime-tape {
+  background: #b91c1c;
+  color: #fff;
+  font-family: 'Cinzel', serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-align: center;
+  padding: 0.5rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+.crime-details {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  background: #100c0c;
+  padding: 1rem 1.2rem;
+  border-radius: 6px;
+  line-height: 1.8;
+}
+.victim-name {
+  font-family: 'Cinzel', serif;
+  font-size: 1.4rem;
+  color: #fca5a5;
+  font-weight: 700;
+}
+.crime-description { color: var(--text); margin-top: 0.2rem; }
+.crime-method { color: var(--text); }
+.crime-round {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin-top: 0.4rem;
+}
+.evidence-box h3, .alive-section h3 {
+  font-family: 'Cinzel', serif;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+}
+.evidence-list { display: flex; flex-direction: column; gap: 0.35rem; }
+.evidence-item {
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  padding: 0.45rem 0.8rem;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+
+.suspects-display { display: flex; flex-direction: column; gap: 0.45rem; margin-bottom: 1rem; }
+.suspect-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+}
+.suspect-rank {
+  font-family: 'Cinzel', serif;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  width: 2rem;
+}
+.suspect-name { flex: 1; font-size: 1rem; }
+.suspect-votes {
+  font-family: 'Cinzel', serif;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.verdict-box {
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  text-align: center;
+}
+.verdict.caught {
+  background: var(--success-bg);
+  border: 1px solid var(--success);
+  border-radius: 8px;
+  padding: 1rem;
+  color: #86efac;
+}
+.verdict.escaped {
+  background: var(--danger-bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 1rem;
+  color: #fca5a5;
+}
+.verdict-name {
+  font-family: 'Cinzel', serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-top: 0.5rem;
+}
+.verdict-sub {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin-top: 0.35rem;
+}
+
+.gameover-icon {
+  font-size: 5rem;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+.card h2#gameover-title {
+  font-size: 1.8rem;
+  text-align: center;
+}
+.gameover-message { text-align: center; color: var(--text-dim); }
+.reveal-box {
+  background: #0f0f0f;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.2rem;
+}
+.reveal-murderer {
+  font-family: 'Cinzel', serif;
+  font-size: 1.1rem;
+  text-align: center;
+  color: var(--gold);
+  margin-bottom: 0.75rem;
+}
+.murder-log h4 {
+  font-family: 'Cinzel', serif;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+}
+.murder-log-item {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  padding: 0.3rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.witness-box {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--gold);
+  background: #0e0e0a;
+  border-radius: 6px;
+  padding: 0.9rem 1.2rem;
+}
+.witness-box h3 {
+  font-family: 'Cinzel', serif;
+  font-size: 0.85rem;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+}
+.witness-testimony {
+  color: var(--text);
+  font-style: italic;
+  line-height: 1.75;
+  font-size: 1rem;
+}
+
+.alibi-section {
+  border-top: 1px solid var(--border);
+  padding-top: 1.1rem;
+}
+.alibi-section h3 {
+  font-family: 'Cinzel', serif;
+  font-size: 1rem;
+  color: var(--text);
+  margin-bottom: 0.4rem;
+  letter-spacing: 0.05em;
+}
+textarea.alibi-input {
+  background: #111;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: 'Crimson Text', serif;
+  font-size: 1.05rem;
+  padding: 0.65rem 1rem;
+  width: 100%;
+  resize: vertical;
+  min-height: 4.5rem;
+  transition: border-color 0.2s;
+  outline: none;
+}
+textarea.alibi-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+textarea.alibi-input::placeholder { color: var(--text-muted); }
+
+.alibis-section {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+.alibis-section h3 {
+  font-family: 'Cinzel', serif;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+}
+.alibis-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.alibi-item {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.55rem 0.9rem;
+  gap: 0.2rem;
+}
+.alibi-player {
+  font-family: 'Cinzel', serif;
+  font-size: 0.78rem;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.alibi-text {
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.alibi-empty { color: var(--text-muted); font-style: italic; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+@media (max-width: 600px) {
+  .game-title { font-size: 1.7rem; }
+  .card { padding: 1.4rem 1.2rem; }
+  .option-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+  .supplies-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .btn-group { flex-direction: column; }
+  .room-code { font-size: 1.3rem; }
+}
