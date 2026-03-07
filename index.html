@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>THIN LINES</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ===== ACCESS CODE ===== -->
+<div id="screen-access" class="screen active">
+  <div class="container">
+    <div class="logo-block">
+      <div class="logo-dagger">🔪</div>
+      <h1 class="game-title">THIN LINES</h1>
+      <p class="game-subtitle">BETA TESTING VERSION 03. CHECK BACK LATER TO PLAY</p>
+    </div>
+    <div class="card">
+      <h2>Enter Access Code</h2>
+      <input type="password" id="input-access-code" placeholder="••••••••" maxlength="20" autocomplete="off" />
+      <button class="btn btn-primary" onclick="checkAccessCode()">Enter</button>
+      <p class="error-msg" id="error-access"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PROFILE ===== -->
+<div id="screen-profile" class="screen">
+  <div class="container">
+    <div class="logo-block">
+      <h1 class="game-title">THIN LINES</h1>
+    </div>
+    <div class="card">
+      <h2>Who Are You?</h2>
+      <input type="text" id="input-player-name" placeholder="Your name…" maxlength="20" autocomplete="off" />
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="createRoom()">🏠 Create Room</button>
+        <button class="btn btn-outline" onclick="showJoinScreen()">🚪 Join Room</button>
+      </div>
+      <p class="error-msg" id="error-profile"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== JOIN ROOM ===== -->
+<div id="screen-join" class="screen">
+  <div class="container">
+    <div class="logo-block">
+      <h1 class="game-title">THIN LINES</h1>
+    </div>
+    <div class="card">
+      <h2>Join a Room</h2>
+      <input type="text" id="input-room-code" placeholder="Room code…" maxlength="10" autocomplete="off" style="text-transform:uppercase" />
+      <button class="btn btn-primary" onclick="joinRoom()">Join</button>
+      <button class="btn btn-text" onclick="showScreen('screen-profile')">← Back</button>
+      <p class="error-msg" id="error-join"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== HOST LOBBY ===== -->
+<div id="screen-host-lobby" class="screen">
+  <div class="container">
+    <div class="logo-block">
+      <h1 class="game-title">THIN LINES</h1>
+    </div>
+    <div class="card">
+      <h2>Room Lobby</h2>
+      <div class="room-code-box">
+        <span class="room-code-label">Room Code</span>
+        <span class="room-code" id="display-room-code">------</span>
+        <button class="btn btn-sm btn-copy" onclick="copyRoomCode(this)">📋 Copy</button>
+      </div>
+      <div class="player-count-bar">Players Online: <strong id="host-player-count">1</strong></div>
+      <div id="host-player-list" class="player-list"></div>
+      <div class="host-mode-toggle">
+        <label class="toggle-label">
+          <input type="checkbox" id="host-playing-toggle" checked onchange="toggleHostPlaying(this)" />
+          <span>Join as a player</span>
+        </label>
+        <p class="toggle-hint" id="host-mode-hint">You will receive a role and participate in the game.</p>
+      </div>
+      <p class="hint-text" id="hint-min-players">Need at least 3 players to start</p>
+      <button class="btn btn-primary btn-lg" id="btn-start" onclick="startGame()" disabled>Start Game</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PLAYER LOBBY ===== -->
+<div id="screen-player-lobby" class="screen">
+  <div class="container">
+    <div class="logo-block">
+      <h1 class="game-title">THIN LINES</h1>
+    </div>
+    <div class="card">
+      <h2>Waiting for Host</h2>
+      <p class="room-tag">Room: <span id="display-my-room-code">------</span></p>
+      <div class="spinner-wrap"><div class="spinner"></div></div>
+      <p class="status-text">The host will start the game soon…</p>
+      <div id="player-lobby-list" class="player-list small"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ROLE REVEAL ===== -->
+<div id="screen-role-reveal" class="screen">
+  <div class="container">
+    <div class="card role-card">
+      <h2>Your Role</h2>
+      <div class="phase-timer-block">
+        <div class="timer-bar-outer"><div class="timer-bar-fill" id="role-timer-fill"></div></div>
+        <div class="timer-text" id="role-timer-text">0:15</div>
+      </div>
+      <div id="role-icon" class="role-icon"></div>
+      <div id="role-title" class="role-title"></div>
+      <div id="role-description" class="role-desc"></div>
+      <button class="btn btn-primary" onclick="acknowledgeRole()">I Understand My Role</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== WAITING SCREEN ===== -->
+<div id="screen-waiting" class="screen">
+  <div class="container">
+    <div class="card">
+      <h2>⏳ Stand By</h2>
+      <div class="spinner-wrap"><div class="spinner"></div></div>
+      <p class="status-text" id="waiting-message">Please wait…</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== HOST BOARD (observer mode) ===== -->
+<div id="screen-host-board" class="screen">
+  <div class="container">
+    <div class="card">
+      <h2>📺 Game Board</h2>
+      <div class="room-code-box">
+        <span class="room-code-label">Room Code</span>
+        <span class="room-code" id="board-room-code">------</span>
+        <button class="btn btn-sm btn-copy" onclick="copyRoomCode(this)">📋 Copy</button>
+      </div>
+      <p class="status-text" id="board-status">Please wait…</p>
+      <div class="phase-timer-block" id="board-timer-block" style="display:none">
+        <div class="timer-bar-outer"><div class="timer-bar-fill" id="board-timer-fill"></div></div>
+        <div class="timer-text" id="board-timer-text">0:00</div>
+      </div>
+      <div class="board-section">
+        <h3 class="board-section-heading">👥 Players</h3>
+        <div id="board-player-list" class="board-player-list"></div>
+      </div>
+      <div id="board-alibis-section" class="alibis-section" style="display:none">
+        <h3>📝 Alibis</h3>
+        <div id="board-alibis-list" class="alibis-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MURDERER TURN ===== -->
+<div id="screen-murderer-turn" class="screen">
+  <div class="container container-wide">
+    <div class="card wide-card">
+      <h2>🔪 Your Turn, Murderer</h2>
+      <div class="round-budget-bar">
+        Round <span id="murder-round-num">1</span>
+        &nbsp;|&nbsp;
+        Budget: $<span id="budget-left">25</span> remaining
+      </div>
+      <div class="phase-timer-block">
+        <div class="timer-bar-outer"><div class="timer-bar-fill" id="murder-timer-fill"></div></div>
+        <div class="timer-text" id="murder-timer-text">1:15</div>
+      </div>
+
+      <div class="murder-section">
+        <h3>① Choose Your Victim</h3>
+        <div id="victim-options" class="option-grid"></div>
+      </div>
+
+      <div class="murder-section">
+        <h3>② Choose Method of Death</h3>
+        <div id="method-options" class="option-grid"></div>
+      </div>
+
+      <div class="murder-section">
+        <h3>③ Purchase Supplies ($25 budget)</h3>
+        <p class="section-hint">Cover your tracks or frame someone. Stay under budget.</p>
+        <div id="supply-options" class="supplies-grid"></div>
+        <p class="budget-line">Remaining budget: $<span id="budget-left-2">25</span></p>
+      </div>
+
+      <button class="btn btn-danger btn-lg" id="btn-commit" onclick="commitMurder()" disabled>
+        🔪 Commit Murder
+      </button>
+      <p class="error-msg" id="error-murder"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CRIME SCENE ===== -->
+<div id="screen-crime-scene" class="screen">
+  <div class="container">
+    <div class="card">
+      <div class="crime-tape">⚠️&nbsp;&nbsp;CRIME SCENE&nbsp;&nbsp;⚠️</div>
+      <h2>Murder Report</h2>
+      <div class="phase-timer-block">
+        <div class="timer-bar-outer"><div class="timer-bar-fill" id="crime-timer-fill"></div></div>
+        <div class="timer-text" id="crime-timer-text">0:45</div>
+      </div>
+      <div id="crime-details" class="crime-details"></div>
+      <div class="evidence-box">
+        <h3>Evidence Found at Scene:</h3>
+        <div id="crime-supplies" class="evidence-list"></div>
+      </div>
+      <div id="witness-box" class="witness-box" style="display:none">
+        <h3>👁️ Witness Testimony:</h3>
+        <div id="witness-testimony" class="witness-testimony"></div>
+      </div>
+      <div id="shooting-outcome-box" class="witness-box" style="display:none">
+        <h3>🔫 Shooting Report:</h3>
+        <div id="shooting-outcome-text" class="witness-testimony"></div>
+      </div>
+      <div id="hospital-record-box" class="witness-box" style="display:none">
+        <h3>🏥 Hospital Record:</h3>
+        <div id="hospital-record-text" class="witness-testimony"></div>
+      </div>
+      <div class="alive-section">
+        <h3>Still Among Us:</h3>
+        <div id="still-alive" class="player-tags"></div>
+      </div>
+      <button class="btn btn-primary" id="btn-proceed-vote" onclick="hostProceedToAlibi()" style="display:none">
+        Proceed Now →
+      </button>
+      <p class="status-text" id="crime-scene-status" style="display:none">Investigation starts automatically…</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ALIBI PHASE ===== -->
+<div id="screen-alibi" class="screen">
+  <div class="container">
+    <div class="card">
+      <h2>📝 Your Alibi</h2>
+      <div class="phase-timer-block">
+        <div class="timer-bar-outer"><div class="timer-bar-fill" id="alibi-timer-fill"></div></div>
+        <div class="timer-text" id="alibi-timer-text">1:00</div>
+      </div>
+      <p class="section-hint">State where you were when the murder occurred. Everyone will see your alibi.</p>
+      <textarea id="input-alibi" class="alibi-input" maxlength="150" placeholder="Where were you? What were you doing?…"></textarea>
+      <button class="btn btn-primary" id="btn-submit-alibi" onclick="submitAlibi()">Submit Alibi</button>
+      <p class="status-text" id="alibi-status"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DISCUSSION PHASE ===== -->
+<div id="screen-discussion" class="screen">
+  <div class="container">
+    <div class="card">
+      <h2>💬 Discussion</h2>
+      <div class="phase-timer-block">
+        <div class="timer-bar-outer"><div class="timer-bar-fill" id="disc-timer-fill"></div></div>
+        <div class="timer-text" id="disc-timer-text">2:00</div>
+      </div>
+      <p class="section-hint">Discuss with the group — who do you think is the murderer?</p>
+      <div id="disc-player-list" class="player-list small"></div>
+      <div id="disc-alibis-section" class="alibis-section" style="display:none">
+        <h3>📝 This Round's Alibis</h3>
+        <div id="disc-alibis-list" class="alibis-list"></div>
+      </div>
+      <button class="btn btn-outline btn-lg" id="btn-skip-discussion" onclick="hostSkipDiscussion()" style="display:none">
+        Skip to Voting →
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== INVESTIGATION / VOTE ===== -->
+<div id="screen-investigation" class="screen">
+  <div class="container">
+    <div class="card">
+      <h2>🗳️ Cast Your Vote</h2>
+      <div class="phase-timer-block">
+        <div class="timer-bar-outer"><div class="timer-bar-fill" id="vote-timer-fill"></div></div>
+        <div class="timer-text" id="vote-timer-text">1:00</div>
+      </div>
+      <p class="section-hint">Who do you think is the murderer? The most-voted player will be executed.</p>
+      <div id="vote-options" class="option-grid"></div>
+      <button class="btn btn-primary" id="btn-vote" onclick="submitVote()" disabled>Submit Vote</button>
+      <p class="status-text" id="vote-status"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ROUND RESULTS ===== -->
+<div id="screen-round-results" class="screen">
+  <div class="container">
+    <div class="card">
+      <h2>📋 Round Results</h2>
+      <div id="alibis-section" class="alibis-section" style="display:none">
+        <h3>📝 Player Alibis</h3>
+        <div id="alibis-list" class="alibis-list"></div>
+      </div>
+      <h3 class="suspects-heading">🔍 Top Suspects</h3>
+      <div id="suspects-list" class="suspects-display"></div>
+      <div id="round-verdict" class="verdict-box"></div>
+      <button class="btn btn-primary" id="btn-next-round" onclick="hostNextRound()" style="display:none">
+        Continue to Next Round →
+      </button>
+      <p class="status-text" id="results-status" style="display:none">Waiting for host to continue…</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== GAME OVER ===== -->
+<div id="screen-game-over" class="screen">
+  <div class="container">
+    <div class="card">
+      <div id="gameover-icon" class="gameover-icon"></div>
+      <h2 id="gameover-title"></h2>
+      <p id="gameover-message" class="gameover-message"></p>
+      <div id="gameover-reveal" class="reveal-box"></div>
+      <button class="btn btn-primary" onclick="location.reload()">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
