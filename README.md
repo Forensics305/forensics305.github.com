@@ -1,4 +1,8 @@
 # THINLINES DEV LOG
+
+THINLINES.LIVE BETA 0.3 DOWNTIME
+The website is temporarily down due to a myriad of bug issues. Be back soon!
+
 THINLINES.LIVE BETA 0.3
 - Fixed bugs
 - new murder option, firearms! theres a 25% chance you shoot your victim through a window, and/or a 5% chance they live, and/or a 2.5% chance they shoot the murderer, this allows the players to catch the murderer, since the victim dies, and the murdurer has to go to the hospital. 
