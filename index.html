@@ -8,25 +8,8 @@
 </head>
 <body>
 
-<!-- ===== ACCESS CODE ===== -->
-<div id="screen-access" class="screen active">
-  <div class="container">
-    <div class="logo-block">
-      <div class="logo-dagger">🔪</div>
-      <h1 class="game-title">THIN LINES</h1>
-      <p class="game-subtitle">BETA TESTING VERSION 04. CHECK BACK LATER TO PLAY</p>
-    </div>
-    <div class="card">
-      <h2>Enter Access Code</h2>
-      <input type="password" id="input-access-code" placeholder="••••••••" maxlength="20" autocomplete="off" />
-      <button class="btn btn-primary" onclick="checkAccessCode()">Enter</button>
-      <p class="error-msg" id="error-access"></p>
-    </div>
-  </div>
-</div>
-
 <!-- ===== PROFILE ===== -->
-<div id="screen-profile" class="screen">
+<div id="screen-profile" class="screen active">
   <div class="container">
     <div class="logo-block">
       <h1 class="game-title">THIN LINES</h1>
@@ -83,6 +66,7 @@
       </div>
       <p class="hint-text" id="hint-min-players">Need at least 3 players to start</p>
       <button class="btn btn-primary btn-lg" id="btn-start" onclick="startGame()" disabled>Start Game</button>
+      <button class="btn btn-text" onclick="goBackFromHostLobby()">← Back</button>
     </div>
   </div>
 </div>

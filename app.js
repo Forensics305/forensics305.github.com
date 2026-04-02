@@ -1,5 +1,4 @@
 'use strict';
-const ACCESS_CODE    = 'YOUNG305';
 const MURDER_BUDGET  = 25;
 const MIN_PLAYERS    = 3;
 const MAX_SUSPECTS   = 5;
@@ -12,6 +11,7 @@ const TIMER_ALIBI       = 60;
 const TIMER_DISCUSSION  = 120;
 const TIMER_VOTE        = 60;
 const TIMER_MURDER_FALLBACK_BUFFER = 5; // extra seconds host waits before auto-generating a murder
+const REJOIN_TIMEOUT_MS = 10000; // ms to wait before giving up on a rejoin attempt
 
 const METHODS = [
   { id: 'stab',     label: '🗡️ Stabbing' },
@@ -261,7 +261,34 @@ function buildSceneForensics(murdererProfile, supplies) {
 }
 
 /* ============================================================
-   ACCESS CODE
+   SESSION & PERSISTENCE HELPERS
+   ============================================================ */
+
+function savePlayerName(name) {
+  try { localStorage.setItem('tl_playerName', name); } catch (e) { console.warn('Could not save player name:', e); }
+}
+
+function loadPlayerName() {
+  try { return localStorage.getItem('tl_playerName') || ''; } catch (e) { console.warn('Could not load player name:', e); return ''; }
+}
+
+function saveSession(data) {
+  try { sessionStorage.setItem('tl_session', JSON.stringify(data)); } catch (e) { console.warn('Could not save session:', e); }
+  const hash = (data.isHost ? 'host' : 'join') + '/' + data.roomCode;
+  history.replaceState(null, '', location.pathname + '#' + hash);
+}
+
+function loadSession() {
+  try { return JSON.parse(sessionStorage.getItem('tl_session') || 'null'); } catch (e) { console.warn('Could not load session:', e); return null; }
+}
+
+function clearSession() {
+  try { sessionStorage.removeItem('tl_session'); } catch (e) { console.warn('Could not clear session:', e); }
+  history.replaceState(null, '', location.pathname);
+}
+
+/* ============================================================
+   PHASE TIMER HELPERS
    ============================================================ */
 // ── Phase timer helpers ───────────────────────────────────────────────────
 let _phaseCountdown = null;  // display countdown interval (all clients)
@@ -358,20 +385,6 @@ function autoGenerateMurder() {
   });
 }
 
-function checkAccessCode() {
-  const val = document.getElementById('input-access-code').value.trim().toUpperCase();
-  if (val === ACCESS_CODE) {
-    showScreen('screen-profile');
-  } else {
-    showError('error-access', 'Incorrect access code. Try again.');
-    document.getElementById('input-access-code').value = '';
-  }
-}
-
-document.getElementById('input-access-code').addEventListener('keydown', e => {
-  if (e.key === 'Enter') checkAccessCode();
-});
-
 function getValidName() {
   const name = document.getElementById('input-player-name').value.trim();
   if (!name) { showError('error-profile', 'Please enter your name.'); return null; }
@@ -382,6 +395,7 @@ function getValidName() {
 function createRoom() {
   const name = getValidName();
   if (!name) return;
+  savePlayerName(name);
   state.playerName = name;
   state.isHost     = true;
   state.playerId   = generatePlayerId();
@@ -391,6 +405,7 @@ function createRoom() {
 function showJoinScreen() {
   const name = getValidName();
   if (!name) return;
+  savePlayerName(name);
   state.playerName = name;
   state.isHost     = false;
   state.playerId   = generatePlayerId();
@@ -400,6 +415,16 @@ function showJoinScreen() {
 document.getElementById('input-player-name').addEventListener('keydown', e => {
   if (e.key === 'Enter') createRoom();
 });
+
+function goBackFromHostLobby() {
+  if (state.peer) { try { state.peer.destroy(); } catch (e) {} state.peer = null; }
+  state.roomCode = '';
+  state.players  = [];
+  state.isHost   = false;
+  state.playerId = '';
+  clearSession();
+  showScreen('screen-profile');
+}
 
 function initHostPeer() {
   const code = generateRoomCode();
@@ -411,6 +436,7 @@ function initHostPeer() {
 
   state.peer.on('open', () => {
     state.players = [{ id: state.playerId, name: state.playerName, isAlive: true, isHost: true }];
+    saveSession({ playerId: state.playerId, playerName: state.playerName, roomCode: code, isHost: true });
     renderHostLobby();
   });
 
@@ -619,6 +645,7 @@ function connectToHost() {
     opened = true;
     state.hostConn = conn;
     conn.send({ type: 'player_join', playerId: state.playerId, playerName: state.playerName });
+    saveSession({ playerId: state.playerId, playerName: state.playerName, roomCode: state.roomCode, isHost: false });
     showScreen('screen-player-lobby');
     document.getElementById('display-my-room-code').textContent = state.roomCode;
   });
@@ -666,6 +693,20 @@ function handleMessage(data, senderConn) {
       broadcastToAll({ type: 'player_list', players: publicPlayerList() });
       break;
 
+    case 'player_rejoin':
+      if (!state.isHost) break;
+      {
+        const rejoiner = state.players.find(p => p.id === data.playerId);
+        if (rejoiner) {
+          state.playerConns[data.playerId] = senderConn;
+          if (senderConn) senderConn.metadata = { playerId: data.playerId };
+          senderConn.send({ type: 'rejoin_ack', success: true, gameStatus: state.gameStatus, players: publicPlayerList() });
+        } else {
+          senderConn.send({ type: 'rejoin_ack', success: false });
+        }
+      }
+      break;
+
     case 'role_ack':
       if (!state.isHost) break;
       state.roleAcks[data.playerId] = true;
@@ -699,8 +740,27 @@ function handleMessage(data, senderConn) {
       break;
 
     case 'kicked':
+      clearSession();
       alert('You have been removed from the room.');
       location.reload();
+      break;
+
+    case 'rejoin_ack':
+      if (data.success) {
+        state.players = data.players || state.players;
+        if (data.gameStatus === 'lobby') {
+          showScreen('screen-player-lobby');
+          document.getElementById('display-my-room-code').textContent = state.roomCode;
+          renderPlayerLobby();
+        } else {
+          showScreen('screen-waiting');
+          document.getElementById('waiting-message').textContent = 'Reconnected — waiting for next phase…';
+        }
+      } else {
+        clearSession();
+        if (state.peer) { try { state.peer.destroy(); } catch (e) {} state.peer = null; }
+        showScreen('screen-profile');
+      }
       break;
 
     case 'game_start':
@@ -1769,6 +1829,7 @@ function endGame(winner) {
 
 function handleGameOver(data) {
   state.gameStatus = 'game_over';
+  clearSession();
   showScreen('screen-game-over');
 
   const icon    = document.getElementById('gameover-icon');
@@ -1804,4 +1865,67 @@ function handleGameOver(data) {
              ).join('')}
          </div>`
       : '');
+}
+
+/* ============================================================
+   PAGE LOAD — prefill name & attempt auto-rejoin
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', () => {
+  // Prefill player name from localStorage
+  const savedName = loadPlayerName();
+  if (savedName) {
+    document.getElementById('input-player-name').value = savedName;
+  }
+
+  // Check for a saved player (non-host) session to rejoin
+  const session = loadSession();
+  if (session && !session.isHost && session.playerId && session.playerName && session.roomCode) {
+    attemptRejoin(session);
+  }
+});
+
+function attemptRejoin(session) {
+  state.playerName = session.playerName;
+  state.playerId   = session.playerId;
+  state.roomCode   = session.roomCode;
+  state.isHost     = false;
+
+  showScreen('screen-waiting');
+  document.getElementById('waiting-message').textContent = 'Reconnecting to game…';
+
+  state.peer = new Peer();
+
+  let resolved = false;
+
+  function onFail() {
+    if (resolved) return;
+    resolved = true;
+    clearSession();
+    try { if (state.peer) state.peer.destroy(); } catch (e) {}
+    state.peer = null;
+    showScreen('screen-profile');
+  }
+
+  state.peer.on('open', () => {
+    const conn = state.peer.connect('tl-' + state.roomCode, { metadata: { playerId: state.playerId } });
+
+    conn.on('open', () => {
+      state.hostConn = conn;
+      conn.send({ type: 'player_rejoin', playerId: state.playerId, playerName: state.playerName });
+    });
+
+    conn.on('data', data => {
+      if (!resolved && data.type === 'rejoin_ack') resolved = true;
+      handleMessage(data, null);
+    });
+
+    conn.on('error', onFail);
+    conn.on('close', () => {
+      if (state.gameStatus !== 'game_over') alert('Disconnected from host.');
+    });
+
+    setTimeout(() => { if (!resolved) onFail(); }, REJOIN_TIMEOUT_MS);
+  });
+
+  state.peer.on('error', onFail);
 }
