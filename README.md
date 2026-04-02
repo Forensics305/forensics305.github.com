@@ -1,15 +1,16 @@
 # THINLINES DEV LOG
-THINLIVES.LIVE BETA 0.5 COMING SOON
+THINLINES.LIVE BETA 0.5 AKA THINLINES.LIVE 1.0 RELEASES COMING SOON
 - URL based games so if someone refreshes accidentally they stay in the game (cookie of their name stored temporarily.)
 - Access Code REMOVED!!!
 - Back button added
 - Full release soon??
-- 
+ 
 THINLINES.LIVE BETA 0.4
 - Fixed bugs
 - Made it possible for people to skip discussions.
 - bugs have formed, what are they
 -> Games are single wifi only, so although you might not be on the right wifi you can't play. May be bad if someone is playing on their phone or something. Bugpatch rolled out in 0.5
+  
 THINLINES.LIVE BETA 0.3 DOWNTIME
 The website is temporarily down due to a myriad of bug issues. Be back soon!
 
