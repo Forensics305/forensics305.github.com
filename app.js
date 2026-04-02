@@ -1395,8 +1395,10 @@ function hostStartVote() {
 function handleStartVoting(data) {
   // Store updated profiles if provided
   if (data.forensicProfiles) state.forensicProfiles = data.forensicProfiles;
+  handleVotePhase(data);
+}
 
-  // observer host gets a read-only watch screen during voting
+// observer host gets a read-only watch screen during voting
 function handleVotePhase(data) {
   if (state.isHost && !state.hostPlaying) {
     const total = data.totalVoters || data.alivePlayers.length;
@@ -1580,7 +1582,7 @@ function tallyVotes(round) {
   // Determine who gets eliminated when murderer escapes
   // Only alive non-murderer players can be eliminated
   let eliminationTarget = null;
-  if (!caught && suspects.length > 0) {
+  if (!murdererCaught && suspects.length > 0) {
     const topSuspect = suspects.find(s => s.id !== state.murdererPlayerId);
     if (topSuspect) {
       eliminationTarget = { id: topSuspect.id, name: topSuspect.name };
@@ -1590,8 +1592,7 @@ function tallyVotes(round) {
     state.pendingElimination = null;
   }
 
-  const msg = { type: 'show_round_results', suspects, murdererCaught: caught, murdererName, round, alibis, eliminationTarget };
-  const msg = { type: 'show_round_results', suspects, murdererCaught, murdererName, eliminatedName, round, alibis };
+  const msg = { type: 'show_round_results', suspects, murdererCaught, murdererName, eliminatedName, round, alibis, eliminationTarget };
   broadcastToAll(msg);
   handleRoundResults(msg);
 }
