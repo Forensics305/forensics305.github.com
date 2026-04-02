@@ -297,24 +297,15 @@
       </div>
       <div class="vote-section">
         <h3>🗳️ Cast Your Vote</h3>
-        <p class="section-hint">Who do you think is the murderer?</p>
+        <div class="phase-timer-block">
+          <div class="timer-bar-outer"><div class="timer-bar-fill" id="vote-timer-fill"></div></div>
+          <div class="timer-text" id="vote-timer-text">1:00</div>
+        </div>
+        <p class="section-hint">Who do you think is the murderer? The most-voted player will be executed.</p>
         <div id="vote-options" class="option-grid"></div>
+        <button class="btn btn-primary" id="btn-vote" onclick="submitVote()" disabled>Submit Vote</button>
+        <p class="status-text" id="vote-status"></p>
       </div>
-      <div class="alibi-section">
-        <h3>📝 Your Alibi</h3>
-        <p class="section-hint">State where you were when the murder occurred. All players will see your alibi.</p>
-        <textarea id="input-alibi" class="alibi-input" maxlength="150" placeholder="Where were you? What were you doing?…"></textarea>
-  <div class="container">
-    <div class="card">
-      <h2>🗳️ Cast Your Vote</h2>
-      <div class="phase-timer-block">
-        <div class="timer-bar-outer"><div class="timer-bar-fill" id="vote-timer-fill"></div></div>
-        <div class="timer-text" id="vote-timer-text">1:00</div>
-      </div>
-      <p class="section-hint">Who do you think is the murderer? The most-voted player will be executed.</p>
-      <div id="vote-options" class="option-grid"></div>
-      <button class="btn btn-primary" id="btn-vote" onclick="submitVote()" disabled>Submit Vote</button>
-      <p class="status-text" id="vote-status"></p>
     </div>
   </div>
 </div>
