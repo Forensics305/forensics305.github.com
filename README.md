@@ -4,6 +4,7 @@ THINLIVES.LIVE BETA 0.5 COMING SOON
 - Access Code REMOVED!!!
 - Back button added
 - Full release soon??
+- 
 THINLINES.LIVE BETA 0.4
 - Fixed bugs
 - Made it possible for people to skip discussions.
