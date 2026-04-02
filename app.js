@@ -142,6 +142,9 @@ let state = {
   pendingElimination:  null,   // {id, name} of player to eliminate at start of next round
   // per-round alibi tracking
   alibiSubmitted:  false,
+
+  // skip-discussion votes (host only, reset each discussion)
+  skipVotes:       [],
 };
 
 function generateRoomCode() {
@@ -684,6 +687,11 @@ function handleMessage(data, senderConn) {
       recordVote(data);
       break;
 
+    case 'skip_discussion_vote':
+      if (!state.isHost) break;
+      recordSkipDiscussionVote(data);
+      break;
+
     /* ---- players receive ---- */
     case 'player_list':
       state.players = data.players;
@@ -734,6 +742,10 @@ function handleMessage(data, senderConn) {
       if (document.getElementById('vote-status')) {
         document.getElementById('vote-status').textContent = `${data.received} / ${data.total} votes received…`;
       }
+      break;
+
+    case 'skip_discussion_update':
+      updateSkipDiscussionUI(data.skipCount, data.aliveCount);
       break;
 
     case 'show_round_results':
@@ -1313,6 +1325,8 @@ function hostStartDiscussion() {
     alibi:      text,
   }));
 
+  state.skipVotes = [];
+
   const msg = { type: 'start_discussion', players: allPlayers, round: state.currentRound, alibis };
   broadcastToAll(msg);
   handleDiscussion(msg);
@@ -1361,7 +1375,13 @@ function handleDiscussion(data) {
   }
 
   const skipBtn = document.getElementById('btn-skip-discussion');
-  if (skipBtn) skipBtn.style.display = state.isHost ? 'block' : 'none';
+  if (skipBtn) {
+    skipBtn.style.display = 'block';
+    skipBtn.disabled = false;
+    skipBtn.textContent = 'Vote to Skip ✋';
+  }
+  const skipCount = document.getElementById('disc-skip-count');
+  if (skipCount) skipCount.textContent = '';
 
   startCountdown('disc-timer-text', 'disc-timer-fill', TIMER_DISCUSSION, () => {
     if (state.gameStatus === 'discussion') hostStartVote();
@@ -1372,6 +1392,38 @@ function hostSkipDiscussion() {
   if (!state.isHost || state.gameStatus !== 'discussion') return;
   clearAllTimers();
   hostStartVote();
+}
+
+function playerVoteSkipDiscussion() {
+  if (state.gameStatus !== 'discussion') return;
+  const skipBtn = document.getElementById('btn-skip-discussion');
+  if (skipBtn) skipBtn.disabled = true;
+  if (state.isHost) {
+    recordSkipDiscussionVote({ playerId: state.playerId });
+  } else {
+    state.hostConn.send({ type: 'skip_discussion_vote', playerId: state.playerId });
+  }
+}
+
+function recordSkipDiscussionVote(data) {
+  if (!state.isHost) return;
+  if (state.gameStatus !== 'discussion') return;
+  if (!state.skipVotes.includes(data.playerId)) {
+    state.skipVotes.push(data.playerId);
+  }
+  const aliveCount = state.players.filter(p => p.isAlive).length;
+  const skipCount  = state.skipVotes.length;
+  broadcastToAll({ type: 'skip_discussion_update', skipCount, aliveCount });
+  updateSkipDiscussionUI(skipCount, aliveCount);
+  if (skipCount > aliveCount / 2) {
+    clearAllTimers();
+    hostStartVote();
+  }
+}
+
+function updateSkipDiscussionUI(skipCount, aliveCount) {
+  const label = document.getElementById('disc-skip-count');
+  if (label) label.textContent = `${skipCount} / ${aliveCount} want to skip`;
 }
 
 function hostStartVote() {
