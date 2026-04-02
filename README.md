@@ -1,5 +1,5 @@
 # THINLINES DEV LOG
-THINLINES.LIVE BETA 0.5 AKA THINLINES.LIVE 1.0 RELEASES COMING SOON
+THINLINES.LIVE BETA 0.5 
 - URL based games so if someone refreshes accidentally they stay in the game (cookie of their name stored temporarily.)
 - Access Code REMOVED!!!
 - Back button added
