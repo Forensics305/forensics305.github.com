@@ -13,6 +13,19 @@ const TIMER_VOTE        = 60;
 const TIMER_MURDER_FALLBACK_BUFFER = 5; // extra seconds host waits before auto-generating a murder
 const REJOIN_TIMEOUT_MS = 10000; // ms to wait before giving up on a rejoin attempt
 
+// PeerJS config with STUN + TURN servers for cross-network (different WiFi / mobile) connectivity
+const PEER_CONFIG = {
+  config: {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:openrelay.metered.ca:80' },
+      { urls: 'turn:openrelay.metered.ca:80',               username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443',              username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp',username: 'openrelayproject', credential: 'openrelayproject' },
+    ],
+  },
+};
+
 const METHODS = [
   { id: 'stab',     label: '🗡️ Stabbing' },
   { id: 'poison',   label: '☠️ Poisoning' },
@@ -432,7 +445,7 @@ function initHostPeer() {
   showScreen('screen-host-lobby');
   document.getElementById('display-room-code').textContent = code;
 
-  state.peer = new Peer('tl-' + code);
+  state.peer = new Peer('tl-' + code, PEER_CONFIG);
 
   state.peer.on('open', () => {
     state.players = [{ id: state.playerId, name: state.playerName, isAlive: true, isHost: true }];
@@ -501,12 +514,13 @@ function kickPlayer(playerId) {
 function copyRoomCode(btnEl) {
   const code = state.roomCode;
   const btn = btnEl || document.querySelector('#screen-host-lobby .btn-copy');
+  const joinUrl = location.origin + location.pathname + '#join/' + code;
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(code).then(() => {
+    navigator.clipboard.writeText(joinUrl).then(() => {
       if (btn) { const orig = btn.textContent; btn.textContent = '✓ Copied!'; setTimeout(() => { btn.textContent = orig; }, 2000); }
-    }).catch(() => { prompt('Copy this room code:', code); });
+    }).catch(() => { prompt('Copy this invite link:', joinUrl); });
   } else {
-    prompt('Copy this room code:', code);
+    prompt('Copy this invite link:', joinUrl);
   }
 }
 
@@ -629,7 +643,7 @@ document.getElementById('input-room-code').addEventListener('keydown', e => {
 });
 
 function initPlayerPeer() {
-  state.peer = new Peer();
+  state.peer = new Peer(undefined, PEER_CONFIG);
   state.peer.on('open', connectToHost);
   state.peer.on('error', err => {
     console.error('Player peer error:', err);
@@ -1877,6 +1891,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('input-player-name').value = savedName;
   }
 
+  // Check for a URL invite link (e.g. #join/ABC123) and pre-fill the room code
+  const hashMatch = location.hash.slice(1).match(/^join\/([A-Za-z0-9]{4,10})$/);
+  if (hashMatch) {
+    const pendingCode = hashMatch[1].toUpperCase();
+    document.getElementById('input-room-code').value = pendingCode;
+    // Clear the hash so it doesn't linger after the code is consumed
+    history.replaceState(null, '', location.pathname);
+    // If the player already has a name saved, skip straight to the join screen
+    if (savedName) {
+      state.playerName = savedName;
+      state.isHost     = false;
+      state.playerId   = generatePlayerId();
+      showScreen('screen-join');
+    }
+    return; // skip session rejoin — user is intentionally joining a new game via invite link
+  }
+
   // Check for a saved player (non-host) session to rejoin
   const session = loadSession();
   if (session && !session.isHost && session.playerId && session.playerName && session.roomCode) {
@@ -1893,7 +1924,7 @@ function attemptRejoin(session) {
   showScreen('screen-waiting');
   document.getElementById('waiting-message').textContent = 'Reconnecting to game…';
 
-  state.peer = new Peer();
+  state.peer = new Peer(undefined, PEER_CONFIG);
 
   let resolved = false;
 
