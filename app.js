@@ -124,6 +124,7 @@ let state = {
   roomCode:        '',
   players:         [],        // [{id, name, isAlive, isHost}]
   gameStatus:      'lobby',
+  joinNameBack:    'screen-join', // where back-button on screen-join-name navigates
 
   // roles
   role:            null,      // 'murderer' | 'innocent'
@@ -416,12 +417,6 @@ function createRoom() {
 }
 
 function showJoinScreen() {
-  const name = getValidName();
-  if (!name) return;
-  savePlayerName(name);
-  state.playerName = name;
-  state.isHost     = false;
-  state.playerId   = generatePlayerId();
   showScreen('screen-join');
 }
 
@@ -635,11 +630,41 @@ function joinRoom() {
   const code = document.getElementById('input-room-code').value.trim().toUpperCase();
   if (!code) { showError('error-join', 'Please enter a room code.'); return; }
   state.roomCode = code;
-  initPlayerPeer();
+  document.getElementById('display-join-room-code').textContent = code;
+  const savedName = loadPlayerName();
+  if (savedName) document.getElementById('input-join-name').value = savedName;
+  state.joinNameBack = 'screen-join';
+  showScreen('screen-join-name');
+  document.getElementById('input-join-name').focus();
 }
 
 document.getElementById('input-room-code').addEventListener('keydown', e => {
   if (e.key === 'Enter') joinRoom();
+});
+
+function backFromJoinName() {
+  showScreen(state.joinNameBack);
+}
+
+function validateJoinName() {
+  const name = document.getElementById('input-join-name').value.trim();
+  if (!name) { showError('error-join-name', 'Please enter your name.'); return null; }
+  if (name.length > 20) { showError('error-join-name', 'Name must be 20 characters or less.'); return null; }
+  return name;
+}
+
+function proceedToJoin() {
+  const name = validateJoinName();
+  if (!name) return;
+  savePlayerName(name);
+  state.playerName = name;
+  state.isHost     = false;
+  state.playerId   = generatePlayerId();
+  initPlayerPeer();
+}
+
+document.getElementById('input-join-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') proceedToJoin();
 });
 
 function initPlayerPeer() {
@@ -647,7 +672,7 @@ function initPlayerPeer() {
   state.peer.on('open', connectToHost);
   state.peer.on('error', err => {
     console.error('Player peer error:', err);
-    showError('error-join', 'Connection error. Please try again.');
+    showError('error-join-name', 'Connection error. Please try again.');
   });
 }
 
@@ -667,14 +692,14 @@ function connectToHost() {
   conn.on('data',  data => handleMessage(data, null));
   conn.on('error', err  => {
     console.error('Conn error:', err);
-    showError('error-join', 'Could not connect. Check the room code and try again.');
+    showError('error-join-name', 'Could not connect. Check the room code and try again.');
   });
   conn.on('close', () => {
     if (state.gameStatus !== 'game_over') alert('Disconnected from host.');
   });
 
   setTimeout(() => {
-    if (!opened) showError('error-join', 'Connection timed out. Check the room code and try again.');
+    if (!opened) showError('error-join-name', 'Connection timed out. Check the room code and try again.');
   }, 12000);
 }
 
@@ -1891,20 +1916,19 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('input-player-name').value = savedName;
   }
 
-  // Check for a URL invite link (e.g. #join/ABC123) and pre-fill the room code
+  // Check for a URL invite link (e.g. #join/ABC123) and go straight to name entry
   const hashMatch = location.hash.slice(1).match(/^join\/([A-Za-z0-9]{4,10})$/);
   if (hashMatch) {
     const pendingCode = hashMatch[1].toUpperCase();
-    document.getElementById('input-room-code').value = pendingCode;
     // Clear the hash so it doesn't linger after the code is consumed
     history.replaceState(null, '', location.pathname);
-    // If the player already has a name saved, skip straight to the join screen
-    if (savedName) {
-      state.playerName = savedName;
-      state.isHost     = false;
-      state.playerId   = generatePlayerId();
-      showScreen('screen-join');
-    }
+    state.roomCode = pendingCode;
+    state.isHost   = false;
+    document.getElementById('display-join-room-code').textContent = pendingCode;
+    if (savedName) document.getElementById('input-join-name').value = savedName;
+    state.joinNameBack = 'screen-profile';
+    showScreen('screen-join-name');
+    document.getElementById('input-join-name').focus();
     return; // skip session rejoin — user is intentionally joining a new game via invite link
   }
 
