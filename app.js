@@ -13,27 +13,33 @@ const TIMER_VOTE        = 60;
 const TIMER_MURDER_FALLBACK_BUFFER = 5; // extra seconds host waits before auto-generating a murder
 const REJOIN_TIMEOUT_MS = 10000; // ms to wait before giving up on a rejoin attempt
 
-// PeerJS config with STUN + TURN servers for cross-network (different WiFi / mobile) connectivity.
-// Multiple providers are included so that connections work even on restrictive networks (e.g. school
-// networks with AP isolation or content filters): turns: URIs on port 443 look identical to HTTPS
-// and are almost never blocked, and having two independent providers means a single blocked domain
-// won't prevent connections.
-const PEER_CONFIG = {
-  config: {
-    iceServers: [
-      // STUN — multiple Google servers as fallback
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      // OpenRelay TURN — port 80/443 UDP, TCP, and TLS (turns:) on 443
-      { urls: 'stun:openrelay.metered.ca:80' },
-      { urls: 'turn:openrelay.metered.ca:80',                username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443',               username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turns:openrelay.metered.ca:443',              username: 'openrelayproject', credential: 'openrelayproject' },
-    ],
-  },
-};
+// URL of the AWS Lambda endpoint that vends short-lived KVS ICE server credentials.
+// After deploying infrastructure/ with SAM, replace this placeholder with the
+// IceConfigUrl output printed by `sam deploy`.
+const ICE_CONFIG_URL = 'https://YOUR_API_GATEWAY_URL/ice-config';
+
+// Fallback ICE servers used when the API endpoint is unreachable (e.g. during
+// local development before the infrastructure is deployed).
+const FALLBACK_ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
+
+// Cached promise so the fetch happens at most once per page load.
+let _iceConfigPromise = null;
+
+function getIceConfig() {
+  if (!_iceConfigPromise) {
+    _iceConfigPromise = fetch(ICE_CONFIG_URL)
+      .then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); })
+      .then(data => ({ config: { iceServers: data.iceServers } }))
+      .catch(err => {
+        console.warn('ICE config fetch failed, using fallback STUN only:', err);
+        return { config: { iceServers: FALLBACK_ICE_SERVERS } };
+      });
+  }
+  return _iceConfigPromise;
+}
 
 const METHODS = [
   { id: 'stab',     label: '🗡️ Stabbing' },
@@ -449,32 +455,34 @@ function initHostPeer() {
   showScreen('screen-host-lobby');
   document.getElementById('display-room-code').textContent = code;
 
-  state.peer = new Peer('tl-' + code, PEER_CONFIG);
+  getIceConfig().then(peerConfig => {
+    state.peer = new Peer('tl-' + code, peerConfig);
 
-  state.peer.on('open', () => {
-    state.players = [{ id: state.playerId, name: state.playerName, isAlive: true, isHost: true }];
-    saveSession({ playerId: state.playerId, playerName: state.playerName, roomCode: code, isHost: true });
-    renderHostLobby();
-  });
+    state.peer.on('open', () => {
+      state.players = [{ id: state.playerId, name: state.playerName, isAlive: true, isHost: true }];
+      saveSession({ playerId: state.playerId, playerName: state.playerName, roomCode: code, isHost: true });
+      renderHostLobby();
+    });
 
-  state.peer.on('connection', conn => {
-    conn.on('open', () => {
-      conn.on('data',  data => handleMessage(data, conn));
-      conn.on('close', ()   => {
-        const pid = conn.metadata && conn.metadata.playerId;
-        if (pid) handlePlayerDisconnect(pid);
+    state.peer.on('connection', conn => {
+      conn.on('open', () => {
+        conn.on('data',  data => handleMessage(data, conn));
+        conn.on('close', ()   => {
+          const pid = conn.metadata && conn.metadata.playerId;
+          if (pid) handlePlayerDisconnect(pid);
+        });
       });
     });
-  });
 
-  state.peer.on('error', err => {
-    if (err.type === 'unavailable-id') {
-      state.peer.destroy();
-      initHostPeer(); // try a new code
-    } else {
-      console.error('Host peer error:', err);
-      alert('Connection error: ' + err.message);
-    }
+    state.peer.on('error', err => {
+      if (err.type === 'unavailable-id') {
+        state.peer.destroy();
+        initHostPeer(); // try a new code
+      } else {
+        console.error('Host peer error:', err);
+        alert('Connection error: ' + err.message);
+      }
+    });
   });
 }
 
@@ -677,11 +685,13 @@ document.getElementById('input-join-name').addEventListener('keydown', e => {
 });
 
 function initPlayerPeer() {
-  state.peer = new Peer(undefined, PEER_CONFIG);
-  state.peer.on('open', connectToHost);
-  state.peer.on('error', err => {
-    console.error('Player peer error:', err);
-    showError('error-join-name', 'Connection error. Please try again.');
+  getIceConfig().then(peerConfig => {
+    state.peer = new Peer(undefined, peerConfig);
+    state.peer.on('open', connectToHost);
+    state.peer.on('error', err => {
+      console.error('Player peer error:', err);
+      showError('error-join-name', 'Connection error. Please try again.');
+    });
   });
 }
 
@@ -1957,8 +1967,6 @@ function attemptRejoin(session) {
   showScreen('screen-waiting');
   document.getElementById('waiting-message').textContent = 'Reconnecting to game…';
 
-  state.peer = new Peer(undefined, PEER_CONFIG);
-
   let resolved = false;
 
   function onFail() {
@@ -1970,26 +1978,30 @@ function attemptRejoin(session) {
     showScreen('screen-profile');
   }
 
-  state.peer.on('open', () => {
-    const conn = state.peer.connect('tl-' + state.roomCode, { metadata: { playerId: state.playerId } });
+  getIceConfig().then(peerConfig => {
+    state.peer = new Peer(undefined, peerConfig);
 
-    conn.on('open', () => {
-      state.hostConn = conn;
-      conn.send({ type: 'player_rejoin', playerId: state.playerId, playerName: state.playerName });
+    state.peer.on('open', () => {
+      const conn = state.peer.connect('tl-' + state.roomCode, { metadata: { playerId: state.playerId } });
+
+      conn.on('open', () => {
+        state.hostConn = conn;
+        conn.send({ type: 'player_rejoin', playerId: state.playerId, playerName: state.playerName });
+      });
+
+      conn.on('data', data => {
+        if (!resolved && data.type === 'rejoin_ack') resolved = true;
+        handleMessage(data, null);
+      });
+
+      conn.on('error', onFail);
+      conn.on('close', () => {
+        if (state.gameStatus !== 'game_over') alert('Disconnected from host.');
+      });
+
+      setTimeout(() => { if (!resolved) onFail(); }, REJOIN_TIMEOUT_MS);
     });
 
-    conn.on('data', data => {
-      if (!resolved && data.type === 'rejoin_ack') resolved = true;
-      handleMessage(data, null);
-    });
-
-    conn.on('error', onFail);
-    conn.on('close', () => {
-      if (state.gameStatus !== 'game_over') alert('Disconnected from host.');
-    });
-
-    setTimeout(() => { if (!resolved) onFail(); }, REJOIN_TIMEOUT_MS);
+    state.peer.on('error', onFail);
   });
-
-  state.peer.on('error', onFail);
 }

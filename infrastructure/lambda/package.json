@@ -1,0 +1,10 @@
+{
+  "name": "ice-config-lambda",
+  "version": "1.0.0",
+  "description": "Vends AWS KVS ICE server credentials for Forensics305",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-kinesis-video": "3.637.0",
+    "@aws-sdk/client-kinesis-video-signaling": "3.1026.0"
+  }
+}

@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Forensics305 – AWS KVS ICE server config endpoint
+
+Globals:
+  Function:
+    Timeout: 15
+    Runtime: nodejs20.x
+    Architectures: [arm64]
+
+Resources:
+
+  # KVS Signaling Channel — used purely as an auth scope for GetIceServerConfig.
+  KvsChannel:
+    Type: AWS::KinesisVideo::SignalingChannel
+    Properties:
+      Name: forensics305-turn
+      Type: SINGLE_MASTER
+      MessageTtlSeconds: 60
+
+  # IAM role for the Lambda: CloudWatch Logs + KVS ICE config only.
+  IceConfigRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: KvsIce
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kinesisvideo:GetSignalingChannelEndpoint
+                  - kinesisvideo:GetIceServerConfig
+                Resource: !GetAtt KvsChannel.Arn
+
+  # HTTP API (API Gateway v2) — no auth needed since credentials are ephemeral.
+  IceApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+
+  # Lambda that fetches fresh ICE server credentials from KVS and returns them.
+  IceConfigFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: lambda/
+      Role: !GetAtt IceConfigRole.Arn
+      Environment:
+        Variables:
+          CHANNEL_ARN: !GetAtt KvsChannel.Arn
+      Events:
+        GetIce:
+          Type: HttpApi
+          Properties:
+            Path: /ice-config
+            Method: GET
+            ApiId: !Ref IceApi
+
+Outputs:
+  IceConfigUrl:
+    Description: >
+      Paste this URL as the value of ICE_CONFIG_URL in app.js after deploying.
+    Value: !Sub 'https://${IceApi}.execute-api.${AWS::Region}.amazonaws.com/ice-config'
