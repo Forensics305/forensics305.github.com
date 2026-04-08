@@ -31,10 +31,6 @@ const PEER_CONFIG = {
       { urls: 'turn:openrelay.metered.ca:443',               username: 'openrelayproject', credential: 'openrelayproject' },
       { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
       { urls: 'turns:openrelay.metered.ca:443',              username: 'openrelayproject', credential: 'openrelayproject' },
-      // freestun.net — independent provider; turns: on 5350 is TLS and bypasses most firewalls
-      { urls: 'stun:freestun.net:3479' },
-      { urls: 'turn:freestun.net:3479',                      username: 'free', credential: 'free' },
-      { urls: 'turns:freestun.net:5350',                     username: 'free', credential: 'free' },
     ],
   },
 };
