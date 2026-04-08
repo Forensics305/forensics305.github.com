@@ -13,15 +13,28 @@ const TIMER_VOTE        = 60;
 const TIMER_MURDER_FALLBACK_BUFFER = 5; // extra seconds host waits before auto-generating a murder
 const REJOIN_TIMEOUT_MS = 10000; // ms to wait before giving up on a rejoin attempt
 
-// PeerJS config with STUN + TURN servers for cross-network (different WiFi / mobile) connectivity
+// PeerJS config with STUN + TURN servers for cross-network (different WiFi / mobile) connectivity.
+// Multiple providers are included so that connections work even on restrictive networks (e.g. school
+// networks with AP isolation or content filters): turns: URIs on port 443 look identical to HTTPS
+// and are almost never blocked, and having two independent providers means a single blocked domain
+// won't prevent connections.
 const PEER_CONFIG = {
   config: {
     iceServers: [
+      // STUN — multiple Google servers as fallback
       { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      // OpenRelay TURN — port 80/443 UDP, TCP, and TLS (turns:) on 443
       { urls: 'stun:openrelay.metered.ca:80' },
-      { urls: 'turn:openrelay.metered.ca:80',               username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443',              username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443?transport=tcp',username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:80',                username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443',               username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turns:openrelay.metered.ca:443',              username: 'openrelayproject', credential: 'openrelayproject' },
+      // freestun.net — independent provider; turns: on 5350 is TLS and bypasses most firewalls
+      { urls: 'stun:freestun.net:3479' },
+      { urls: 'turn:freestun.net:3479',                      username: 'free', credential: 'free' },
+      { urls: 'turns:freestun.net:5350',                     username: 'free', credential: 'free' },
     ],
   },
 };
