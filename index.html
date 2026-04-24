@@ -15,12 +15,12 @@
       <h1 class="game-title">THIN LINES 0.5</h1>
     </div>
     <div class="card">
-      <h2>Who Are You?</h2>
+      <h2>Create a Room</h2>
+      <p class="section-hint">Enter your name to host a new game.</p>
       <input type="text" id="input-player-name" placeholder="Your name…" maxlength="20" autocomplete="off" />
-      <div class="btn-group">
-        <button class="btn btn-primary" onclick="createRoom()">🏠 Create Room</button>
-        <button class="btn btn-outline" onclick="showJoinScreen()">🚪 Join Room</button>
-      </div>
+      <button class="btn btn-primary" onclick="createRoom()">🏠 Create Room</button>
+      <div class="profile-divider">— or —</div>
+      <button class="btn btn-outline" onclick="showJoinScreen()">🚪 Join a Room</button>
       <p class="error-msg" id="error-profile"></p>
     </div>
   </div>
@@ -192,6 +192,10 @@
         <h3>③ Purchase Supplies ($25 budget)</h3>
         <p class="section-hint">Cover your tracks or frame someone. Stay under budget.</p>
         <div id="supply-options" class="supplies-grid"></div>
+        <div id="frame-target-container" class="frame-target-container" style="display:none">
+          <p class="frame-target-label">🎭 Who do you want to frame? (Fake ID)</p>
+          <div id="frame-target-options" class="option-grid"></div>
+        </div>
         <p class="budget-line">Remaining budget: $<span id="budget-left-2">25</span></p>
       </div>
 

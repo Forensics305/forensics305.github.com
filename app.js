@@ -149,6 +149,7 @@ let state = {
   selectedVictim:  null,
   selectedMethod:  null,
   selectedSupplies: [],
+  selectedFrameTarget: null,
   budgetLeft:      MURDER_BUDGET,
 
   // round tracking
@@ -174,6 +175,9 @@ let state = {
 
   // skip-discussion votes (host only, reset each discussion)
   skipVotes:       [],
+
+  // pending PeerJS connection verified before name entry (player join flow)
+  pendingConn:     null,
 };
 
 function generateRoomCode() {
@@ -252,16 +256,20 @@ function generateForensicProfile() {
  * taking into account cover-up supplies they purchased.
  * s1 = Rubber Gloves (no fingerprint), s2 = Bleach (destroys DNA),
  * s14 = Evidence Spray (removes palm print).
+ * s4 = Fake ID: use framedProfile (if provided) instead of murdererProfile.
  */
-function buildSceneForensics(murdererProfile, supplies) {
+function buildSceneForensics(murdererProfile, supplies, framedProfile) {
   const supIds       = (supplies || []).map(s => s.id);
   const hasGloves    = supIds.includes('s1');
   const hasBleach    = supIds.includes('s2');
   const hasEvidSpray = supIds.includes('s14');
+  const hasFakeId    = supIds.includes('s4');
+  // Use the framed player's profile when Fake ID was purchased and a target was chosen
+  const baseProfile  = (hasFakeId && framedProfile) ? framedProfile : murdererProfile;
   const evidence     = [];
 
   if (!hasBleach) {
-    const parts   = murdererProfile.dna.split('-');
+    const parts   = baseProfile.dna.split('-');
     const partial = parts.slice(0, 2).join('-') + '-????-????';
     evidence.push({ type: 'dna', icon: '🧬', label: 'DNA Fragment', value: partial,
       note: 'Partial STR profile recovered from scene' });
@@ -271,7 +279,7 @@ function buildSceneForensics(murdererProfile, supplies) {
   }
 
   if (!hasGloves) {
-    evidence.push({ type: 'fingerprint', icon: '👆', label: 'Fingerprint Pattern', value: murdererProfile.fingerprint,
+    evidence.push({ type: 'fingerprint', icon: '👆', label: 'Fingerprint Pattern', value: baseProfile.fingerprint,
       note: 'Latent print lifted from surface' });
   } else {
     evidence.push({ type: 'fingerprint', icon: '👆', label: 'Fingerprint', value: '— NONE —',
@@ -279,7 +287,7 @@ function buildSceneForensics(murdererProfile, supplies) {
   }
 
   if (!hasEvidSpray) {
-    evidence.push({ type: 'palmprint', icon: '✋', label: 'Palm Print', value: murdererProfile.palmPrint,
+    evidence.push({ type: 'palmprint', icon: '✋', label: 'Palm Print', value: baseProfile.palmPrint,
       note: 'Partial palm impression recovered' });
   } else {
     evidence.push({ type: 'palmprint', icon: '✋', label: 'Palm Print', value: '— OBSCURED —',
@@ -651,13 +659,61 @@ function toggleHostPlaying(checkbox) {
 function joinRoom() {
   const code = document.getElementById('input-room-code').value.trim().toUpperCase();
   if (!code) { showError('error-join', 'Please enter a room code.'); return; }
+
+  // Clean up any previous pending connection / peer
+  if (state.pendingConn) { try { state.pendingConn.close(); } catch (e) {} state.pendingConn = null; }
+  if (state.peer) { try { state.peer.destroy(); } catch (e) {} state.peer = null; }
+
   state.roomCode = code;
-  document.getElementById('display-join-room-code').textContent = code;
-  const savedName = loadPlayerName();
-  if (savedName) document.getElementById('input-join-name').value = savedName;
-  state.joinNameBack = 'screen-join';
-  showScreen('screen-join-name');
-  document.getElementById('input-join-name').focus();
+  state.isHost   = false;
+  state.playerId = generatePlayerId();
+
+  const joinBtn = document.querySelector('#screen-join .btn-primary');
+  if (joinBtn) { joinBtn.disabled = true; joinBtn.textContent = 'Connecting…'; }
+
+  const resetJoinBtn = () => {
+    if (joinBtn) { joinBtn.disabled = false; joinBtn.textContent = 'Join'; }
+  };
+
+  getIceConfig().then(peerConfig => {
+    state.peer = new Peer(undefined, peerConfig);
+
+    state.peer.on('open', () => {
+      const conn = state.peer.connect('tl-' + code, { metadata: { playerId: state.playerId } });
+      let verified = false;
+
+      conn.on('open', () => {
+        verified = true;
+        state.pendingConn = conn;
+        conn.on('data',  d => handleMessage(d, null));
+        conn.on('close', () => { if (state.gameStatus !== 'game_over') alert('Disconnected from host.'); });
+        resetJoinBtn();
+        document.getElementById('display-join-room-code').textContent = code;
+        const savedName = loadPlayerName();
+        if (savedName) document.getElementById('input-join-name').value = savedName;
+        state.joinNameBack = 'screen-join';
+        showScreen('screen-join-name');
+        document.getElementById('input-join-name').focus();
+      });
+
+      conn.on('error', () => {
+        if (!verified) { resetJoinBtn(); showError('error-join', 'Could not connect to that room. Check the code and try again.'); }
+      });
+
+      setTimeout(() => {
+        if (!verified) { resetJoinBtn(); showError('error-join', 'Connection timed out. Check the room code and try again.'); }
+      }, 12000);
+    });
+
+    state.peer.on('error', err => {
+      resetJoinBtn();
+      if (err.type === 'peer-unavailable') {
+        showError('error-join', 'Room not found. Check the code and try again.');
+      } else {
+        showError('error-join', 'Connection error: ' + err.message);
+      }
+    });
+  });
 }
 
 document.getElementById('input-room-code').addEventListener('keydown', e => {
@@ -665,6 +721,8 @@ document.getElementById('input-room-code').addEventListener('keydown', e => {
 });
 
 function backFromJoinName() {
+  if (state.pendingConn) { try { state.pendingConn.close(); } catch (e) {} state.pendingConn = null; }
+  if (state.peer && !state.isHost) { try { state.peer.destroy(); } catch (e) {} state.peer = null; }
   showScreen(state.joinNameBack);
 }
 
@@ -681,8 +739,20 @@ function proceedToJoin() {
   savePlayerName(name);
   state.playerName = name;
   state.isHost     = false;
-  state.playerId   = generatePlayerId();
-  initPlayerPeer();
+
+  if (state.pendingConn && state.pendingConn.open) {
+    // Reuse the already-verified connection
+    state.hostConn    = state.pendingConn;
+    state.pendingConn = null;
+    saveSession({ playerId: state.playerId, playerName: state.playerName, roomCode: state.roomCode, isHost: false });
+    state.hostConn.send({ type: 'player_join', playerId: state.playerId, playerName: state.playerName });
+    showScreen('screen-player-lobby');
+    document.getElementById('display-my-room-code').textContent = state.roomCode;
+  } else {
+    // Pending connection was lost while entering the name — reconnect
+    if (!state.playerId) state.playerId = generatePlayerId();
+    initPlayerPeer();
+  }
 }
 
 document.getElementById('input-join-name').addEventListener('keydown', e => {
@@ -690,6 +760,7 @@ document.getElementById('input-join-name').addEventListener('keydown', e => {
 });
 
 function initPlayerPeer() {
+  if (state.peer) { try { state.peer.destroy(); } catch (e) {} state.peer = null; }
   getIceConfig().then(peerConfig => {
     state.peer = new Peer(undefined, peerConfig);
     state.peer.on('open', connectToHost);
@@ -1033,6 +1104,7 @@ function showMurdererTurnScreen(round) {
   state.selectedVictim  = null;
   state.selectedMethod  = null;
   state.selectedSupplies = [];
+  state.selectedFrameTarget = null;
   state.budgetLeft      = MURDER_BUDGET;
 
   showScreen('screen-murderer-turn');
@@ -1076,6 +1148,22 @@ function showMurdererTurnScreen(round) {
     supplyDiv.appendChild(el);
   });
 
+  // Frame-target picker (Fake ID) — hidden until Fake ID is selected
+  const frameContainer = document.getElementById('frame-target-container');
+  const frameOptions   = document.getElementById('frame-target-options');
+  if (frameContainer && frameOptions) {
+    frameContainer.style.display = 'none';
+    frameOptions.innerHTML = '';
+    state.players.filter(p => p.isAlive && p.id !== state.playerId).forEach(p => {
+      const el = document.createElement('div');
+      el.className   = 'option-item';
+      el.dataset.id  = p.id;
+      el.textContent = p.name;
+      el.onclick     = () => selectFrameTarget(p.id, el);
+      frameOptions.appendChild(el);
+    });
+  }
+
   updateCommitButton();
 
   // Auto-commit when time runs out
@@ -1096,16 +1184,34 @@ function selectMethod(id, el) {
   updateCommitButton();
 }
 
+function selectFrameTarget(id, el) {
+  state.selectedFrameTarget = id;
+  document.querySelectorAll('#frame-target-options .option-item').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
 function toggleSupply(supply, el) {
   if (el.classList.contains('selected')) {
     state.selectedSupplies = state.selectedSupplies.filter(s => s.id !== supply.id);
     el.classList.remove('selected');
     state.budgetLeft += supply.cost;
+    // Hide frame-target picker when Fake ID is deselected
+    if (supply.id === 's4') {
+      state.selectedFrameTarget = null;
+      const frameContainer = document.getElementById('frame-target-container');
+      if (frameContainer) frameContainer.style.display = 'none';
+      document.querySelectorAll('#frame-target-options .option-item').forEach(b => b.classList.remove('selected'));
+    }
   } else {
     if (state.budgetLeft < supply.cost) return;
     state.selectedSupplies.push(supply);
     el.classList.add('selected');
     state.budgetLeft -= supply.cost;
+    // Show frame-target picker when Fake ID is selected
+    if (supply.id === 's4') {
+      const frameContainer = document.getElementById('frame-target-container');
+      if (frameContainer) frameContainer.style.display = 'block';
+    }
   }
   document.getElementById('budget-left').textContent   = state.budgetLeft;
   document.getElementById('budget-left-2').textContent = state.budgetLeft;
@@ -1129,12 +1235,13 @@ function commitMurder() {
   }
   clearCountdown();
   const msg = {
-    type:     'murder_submitted',
-    victimId: state.selectedVictim,
-    method:   state.selectedMethod,
-    supplies: state.selectedSupplies,
-    round:    state.currentRound,
-    playerId: state.playerId,
+    type:          'murder_submitted',
+    victimId:      state.selectedVictim,
+    method:        state.selectedMethod,
+    supplies:      state.selectedSupplies,
+    frameTargetId: state.selectedFrameTarget,
+    round:         state.currentRound,
+    playerId:      state.playerId,
   };
   if (state.isHost) {
     processMurder(msg);
@@ -1201,7 +1308,8 @@ function processMurder(data) {
 
   // Build forensic evidence left at scene by the murderer
   const murdererProfile = state.forensicProfiles[state.murdererPlayerId];
-  const sceneForensics  = murdererProfile ? buildSceneForensics(murdererProfile, data.supplies) : [];
+  const framedProfile   = data.frameTargetId ? state.forensicProfiles[data.frameTargetId] : null;
+  const sceneForensics  = murdererProfile ? buildSceneForensics(murdererProfile, data.supplies, framedProfile) : [];
 
   const murder = {
     round:          data.round,
@@ -1460,6 +1568,8 @@ function hostStartDiscussion() {
 }
 
 function handleDiscussion(data) {
+  state.gameStatus = 'discussion';
+
   if (state.isHost && !state.hostPlaying) {
     showHostBoard('Discussion phase — review alibis and talk it out…', TIMER_DISCUSSION);
     const forceVoteBtn = document.getElementById('btn-board-force-vote');
