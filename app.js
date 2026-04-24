@@ -1665,7 +1665,7 @@ function recordSkipDiscussionVote(data) {
   if (!state.skipVotes.includes(data.playerId)) {
     state.skipVotes.push(data.playerId);
   }
-  const aliveCount = state.players.filter(p => p.isAlive).length;
+  const aliveCount = state.players.filter(p => p.isAlive && (state.hostPlaying || !p.isHost)).length;
   const skipCount  = state.skipVotes.length;
   broadcastToAll({ type: 'skip_discussion_update', skipCount, aliveCount });
   updateSkipDiscussionUI(skipCount, aliveCount);
@@ -1723,6 +1723,7 @@ function handleVotePhase(data) {
     return;
   }
 
+  state.gameStatus = 'vote';
   showScreen('screen-investigation');
   state.myVote = null;
   const total = data.totalVoters || data.alivePlayers.length;
