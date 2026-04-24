@@ -1,4 +1,8 @@
 # THINLINES DEV LOG
+THINLINES.LIVE BETA 0.6
+- It'd be really nice if the discussion timer could stop being broken
+- fixed some other bugs
+- working on adding more stuff.
 THINLINES.LIVE BETA 0.5 
 - URL based games so if someone refreshes accidentally they stay in the game (cookie of their name stored temporarily.)
 - Access Code REMOVED!!!
