@@ -550,6 +550,11 @@ function showHostBoard(statusMsg, timerDuration) {
   } else {
     if (boardTimerBlock) boardTimerBlock.style.display = 'none';
   }
+  // Hide host control buttons by default; phase handlers will re-show them as needed
+  const forceVoteBtn = document.getElementById('btn-board-force-vote');
+  const endVoteBtn   = document.getElementById('btn-board-end-vote');
+  if (forceVoteBtn) forceVoteBtn.style.display = 'none';
+  if (endVoteBtn)   endVoteBtn.style.display   = 'none';
   refreshHostBoard();
 }
 
@@ -1457,6 +1462,10 @@ function hostStartDiscussion() {
 function handleDiscussion(data) {
   if (state.isHost && !state.hostPlaying) {
     showHostBoard('Discussion phase — review alibis and talk it out…', TIMER_DISCUSSION);
+    const forceVoteBtn = document.getElementById('btn-board-force-vote');
+    const endVoteBtn   = document.getElementById('btn-board-end-vote');
+    if (forceVoteBtn) forceVoteBtn.style.display = 'block';
+    if (endVoteBtn)   endVoteBtn.style.display   = 'none';
     return;
   }
 
@@ -1501,6 +1510,9 @@ function handleDiscussion(data) {
   const skipCount = document.getElementById('disc-skip-count');
   if (skipCount) skipCount.textContent = '';
 
+  const hostDiscBtn = document.getElementById('btn-host-disc-force-vote');
+  if (hostDiscBtn) hostDiscBtn.style.display = state.isHost ? 'block' : 'none';
+
   startCountdown('disc-timer-text', 'disc-timer-fill', TIMER_DISCUSSION, () => {
     if (state.gameStatus === 'discussion') hostStartVote();
   });
@@ -1510,6 +1522,12 @@ function hostSkipDiscussion() {
   if (!state.isHost || state.gameStatus !== 'discussion') return;
   clearAllTimers();
   hostStartVote();
+}
+
+function hostForceEndVote() {
+  if (!state.isHost || state.gameStatus !== 'vote') return;
+  clearAllTimers();
+  tallyVotes(state.currentRound);
 }
 
 function playerVoteSkipDiscussion() {
@@ -1573,6 +1591,10 @@ function handleVotePhase(data) {
   if (state.isHost && !state.hostPlaying) {
     const total = data.totalVoters || data.alivePlayers.length;
     showHostBoard(`Voting in progress… 0 / ${total} votes received.`, TIMER_VOTE);
+    const forceVoteBtn = document.getElementById('btn-board-force-vote');
+    const endVoteBtn   = document.getElementById('btn-board-end-vote');
+    if (forceVoteBtn) forceVoteBtn.style.display = 'none';
+    if (endVoteBtn)   endVoteBtn.style.display   = 'block';
     return;
   }
 
@@ -1600,6 +1622,9 @@ function handleVotePhase(data) {
   });
 
   document.getElementById('btn-vote').disabled = true;
+
+  const hostInvBtn = document.getElementById('btn-host-inv-end-vote');
+  if (hostInvBtn) hostInvBtn.style.display = state.isHost ? 'block' : 'none';
 
   // Render forensic lab panel
   renderForensicPanel(data.alivePlayers, data.forensicProfiles || {}, data.sceneForensics || []);
