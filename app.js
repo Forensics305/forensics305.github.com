@@ -681,9 +681,11 @@ function joinRoom() {
     state.peer.on('open', () => {
       const conn = state.peer.connect('tl-' + code, { metadata: { playerId: state.playerId } });
       let verified = false;
+      let verifyTimer;
 
       conn.on('open', () => {
         verified = true;
+        clearTimeout(verifyTimer);
         state.pendingConn = conn;
         conn.on('data',  d => handleMessage(d, null));
         conn.on('close', () => { if (state.gameStatus !== 'game_over') alert('Disconnected from host.'); });
@@ -697,11 +699,17 @@ function joinRoom() {
       });
 
       conn.on('error', () => {
-        if (!verified) { resetJoinBtn(); showError('error-join', 'Could not connect to that room. Check the code and try again.'); }
+        if (!verified) { clearTimeout(verifyTimer); resetJoinBtn(); showError('error-join', 'Could not connect to that room. Check the code and try again.'); }
       });
 
-      setTimeout(() => {
-        if (!verified) { resetJoinBtn(); showError('error-join', 'Connection timed out. Check the room code and try again.'); }
+      verifyTimer = setTimeout(() => {
+        if (!verified) {
+          resetJoinBtn();
+          showError('error-join', 'Connection timed out. Check the room code and try again.');
+          try { conn.close(); } catch (e) {}
+          try { state.peer.destroy(); } catch (e) {}
+          state.peer = null;
+        }
       }, 12000);
     });
 
