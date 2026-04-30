@@ -1319,24 +1319,19 @@ function processMurder(data) {
   const framedProfile   = data.frameTargetId ? state.forensicProfiles[data.frameTargetId] : null;
   const sceneForensics  = murdererProfile ? buildSceneForensics(murdererProfile, data.supplies, framedProfile) : [];
 
+  const framedPlayer = data.frameTargetId ? state.players.find(p => p.id === data.frameTargetId) : null;
+
   const murder = {
-    round:          data.round,
-    victimId:       data.victimId,
-    victimName:     victim.name,
-    method:         methodLabel,
-    location:       location,
-    supplies:       data.supplies || [],
-    dumpLocation:   dumpLocation,
-    witnessClue:    witnessClue,
-    sceneForensics: sceneForensics,
-    round:        data.round,
-    victimId:     data.victimId,
-    victimName:   victim.name,
-    method:       methodLabel,
-    location:     location,
-    supplies:     data.supplies || [],
-    dumpLocation: dumpLocation,
-    witnessClue:  witnessClue,
+    round:             data.round,
+    victimId:          data.victimId,
+    victimName:        victim.name,
+    method:            methodLabel,
+    location:          location,
+    supplies:          data.supplies || [],
+    dumpLocation:      dumpLocation,
+    witnessClue:       witnessClue,
+    sceneForensics:    sceneForensics,
+    framedPlayerName:  framedPlayer ? framedPlayer.name : null,
     victimSurvived,
     murdererHospitalized,
     throughWindow,
@@ -1379,9 +1374,16 @@ function handleCrimeScene(data) {
 
   const supDiv = document.getElementById('crime-supplies');
   if (murder.supplies && murder.supplies.length > 0) {
-    supDiv.innerHTML = murder.supplies.map(s =>
-      `<div class="evidence-item">🔍 ${escapeHtml(s.name)} ($${s.cost}) — ${escapeHtml(s.desc)}</div>`
-    ).join('');
+    supDiv.innerHTML = murder.supplies.map(s => {
+      // Fake ID is meant to seem real — display as a genuine ID card found at the scene
+      if (s.id === 's4') {
+        const idLabel = murder.framedPlayerName
+          ? `ID Card (belonging to ${escapeHtml(murder.framedPlayerName)})`
+          : 'ID Card';
+        return `<div class="evidence-item">🪪 ${idLabel} — Personal identification found near the scene</div>`;
+      }
+      return `<div class="evidence-item">🔍 ${escapeHtml(s.name)} ($${s.cost}) — ${escapeHtml(s.desc)}</div>`;
+    }).join('');
   } else {
     supDiv.innerHTML = '<div class="evidence-item">No items found at the scene.</div>';
   }
