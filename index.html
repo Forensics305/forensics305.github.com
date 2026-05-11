@@ -299,6 +299,13 @@
     <div class="card wide-card">
       <h2>🔍 Investigation Phase</h2>
       <p class="section-hint">Use the forensic evidence and suspect profiles below to cast your vote.</p>
+      <div id="suspect-pick-panel">
+        <h3>🎯 Pick 2 Suspects</h3>
+        <p class="section-hint">Choose two people you're suspicious of, then compare their profiles to the scene evidence.</p>
+        <div id="suspect-pick-options" class="option-grid"></div>
+        <p class="status-text" id="suspect-pick-status">Pick 2 suspects to unlock comparison.</p>
+        <button class="btn btn-outline" id="btn-show-forensics" onclick="showSelectedForensics()" disabled>Compare Evidence</button>
+      </div>
       <div id="forensic-panel" class="forensic-panel" style="display:none">
         <h3>🧬 Forensic Lab — Scene Evidence vs Suspect Profiles</h3>
         <div class="forensic-scene-summary-box">
