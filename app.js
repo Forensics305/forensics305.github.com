@@ -1797,7 +1797,8 @@ function updateSuspectPickerUI() {
     statusEl.textContent = '2 suspects selected. Compare their evidence now.';
     showBtn.disabled = false;
   } else {
-    statusEl.textContent = `Pick ${2 - state.selectedSuspects.length} more suspect${state.selectedSuspects.length === 1 ? '' : 's'} to compare.`;
+    const needed = 2 - state.selectedSuspects.length;
+    statusEl.textContent = `Pick ${needed} more suspect${needed === 1 ? '' : 's'} to compare.`;
     showBtn.disabled = true;
     renderForensicPanel([], state.voteForensicProfiles, state.voteSceneForensics);
   }
@@ -1815,16 +1816,18 @@ function renderForensicPanel(suspects, profiles, sceneForensics) {
 
   // Scene evidence summary
   const sceneDiv = document.getElementById('forensic-scene-summary');
-  if (sceneDiv && sceneForensics.length > 0) {
-    sceneDiv.innerHTML = sceneForensics.map(e =>
-      `<div class="fe-scene-item">
-         <span class="fe-icon">${e.icon}</span>
-         <span class="fe-label">${escapeHtml(e.label)}:</span>
-         <span class="fe-value">${escapeHtml(e.value)}</span>
-       </div>`
-    ).join('');
-  } else if (sceneDiv) {
-    sceneDiv.innerHTML = '<div class="fe-scene-item"><span class="fe-value">No scene forensic evidence available.</span></div>';
+  if (sceneDiv) {
+    if (sceneForensics.length > 0) {
+      sceneDiv.innerHTML = sceneForensics.map(e =>
+        `<div class="fe-scene-item">
+           <span class="fe-icon">${e.icon}</span>
+           <span class="fe-label">${escapeHtml(e.label)}:</span>
+           <span class="fe-value">${escapeHtml(e.value)}</span>
+         </div>`
+      ).join('');
+    } else {
+      sceneDiv.innerHTML = '<div class="fe-scene-item"><span class="fe-value">No scene forensic evidence available.</span></div>';
+    }
   }
 
   // Suspect profiles
