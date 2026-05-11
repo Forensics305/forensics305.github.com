@@ -160,6 +160,10 @@ let state = {
   // voting
   myVote:          null,
   votes:           {},        // host: {round: {voterId: suspectId}}
+  selectedSuspects: [],
+  voteAlivePlayers: [],
+  voteForensicProfiles: {},
+  voteSceneForensics: [],
 
   // alibis
   alibis:          {},        // host: {round: {playerId: alibiText}}
@@ -1373,19 +1377,14 @@ function handleCrimeScene(data) {
     victimLine + `<div class="crime-round">Round ${escapeHtml(String(murder.round))}</div>`;
 
   const supDiv = document.getElementById('crime-supplies');
-  if (murder.supplies && murder.supplies.length > 0) {
-    supDiv.innerHTML = murder.supplies.map(s => {
-      // Fake ID is meant to seem real — display as a genuine ID card found at the scene
-      if (s.id === 's4') {
-        const idLabel = murder.framedPlayerName
-          ? `ID Card (belonging to ${escapeHtml(murder.framedPlayerName)})`
-          : 'ID Card';
-        return `<div class="evidence-item">🪪 ${idLabel} — Personal identification found near the scene</div>`;
-      }
-      return `<div class="evidence-item">🔍 ${escapeHtml(s.name)} ($${s.cost}) — ${escapeHtml(s.desc)}</div>`;
-    }).join('');
+  const idEvidence = (murder.supplies || []).find(s => s.id === 's4');
+  if (idEvidence) {
+    const idLabel = murder.framedPlayerName
+      ? `ID Card (belonging to ${escapeHtml(murder.framedPlayerName)})`
+      : 'ID Card';
+    supDiv.innerHTML = `<div class="evidence-item">🪪 ${idLabel} — Personal identification found near the scene</div>`;
   } else {
-    supDiv.innerHTML = '<div class="evidence-item">No items found at the scene.</div>';
+    supDiv.innerHTML = '<div class="evidence-item">No directly attributable scene item was recovered.</div>';
   }
 
   // Forensic evidence section
@@ -1728,6 +1727,10 @@ function handleVotePhase(data) {
   state.gameStatus = 'vote';
   showScreen('screen-investigation');
   state.myVote = null;
+  state.selectedSuspects = [];
+  state.voteAlivePlayers = data.alivePlayers || [];
+  state.voteForensicProfiles = data.forensicProfiles || {};
+  state.voteSceneForensics = data.sceneForensics || [];
   const total = data.totalVoters || data.alivePlayers.length;
   document.getElementById('vote-status').textContent = `Waiting for votes (0 / ${total})…`;
 
@@ -1747,8 +1750,63 @@ function handleVotePhase(data) {
   const hostInvBtn = document.getElementById('btn-host-inv-end-vote');
   if (hostInvBtn) hostInvBtn.style.display = state.isHost ? 'block' : 'none';
 
-  // Render forensic lab panel
-  renderForensicPanel(data.alivePlayers, data.forensicProfiles || {}, data.sceneForensics || []);
+  renderSuspectPicker();
+  renderForensicPanel([], state.voteForensicProfiles, state.voteSceneForensics);
+  startCountdown('vote-timer-text', 'vote-timer-fill', TIMER_VOTE, autoSubmitVote);
+}
+
+function renderSuspectPicker() {
+  const picksDiv = document.getElementById('suspect-pick-options');
+  const statusEl = document.getElementById('suspect-pick-status');
+  const showBtn = document.getElementById('btn-show-forensics');
+  if (!picksDiv || !statusEl || !showBtn) return;
+
+  picksDiv.innerHTML = '';
+  state.voteAlivePlayers.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'option-item';
+    el.dataset.id = p.id;
+    el.textContent = p.name + (p.id === state.playerId ? ' (You)' : '');
+    el.onclick = () => toggleSuspectPick(p.id);
+    picksDiv.appendChild(el);
+  });
+  updateSuspectPickerUI();
+}
+
+function toggleSuspectPick(playerId) {
+  const idx = state.selectedSuspects.indexOf(playerId);
+  if (idx >= 0) {
+    state.selectedSuspects.splice(idx, 1);
+  } else if (state.selectedSuspects.length < 2) {
+    state.selectedSuspects.push(playerId);
+  }
+  updateSuspectPickerUI();
+}
+
+function updateSuspectPickerUI() {
+  const picksDiv = document.getElementById('suspect-pick-options');
+  const statusEl = document.getElementById('suspect-pick-status');
+  const showBtn = document.getElementById('btn-show-forensics');
+  if (!picksDiv || !statusEl || !showBtn) return;
+
+  Array.from(picksDiv.children).forEach(el => {
+    el.classList.toggle('selected', state.selectedSuspects.includes(el.dataset.id));
+  });
+
+  if (state.selectedSuspects.length === 2) {
+    statusEl.textContent = '2 suspects selected. Compare their evidence now.';
+    showBtn.disabled = false;
+  } else {
+    statusEl.textContent = `Pick ${2 - state.selectedSuspects.length} more suspect${state.selectedSuspects.length === 1 ? '' : 's'} to compare.`;
+    showBtn.disabled = true;
+    renderForensicPanel([], state.voteForensicProfiles, state.voteSceneForensics);
+  }
+}
+
+function showSelectedForensics() {
+  if (state.selectedSuspects.length !== 2) return;
+  const suspects = state.voteAlivePlayers.filter(p => state.selectedSuspects.includes(p.id));
+  renderForensicPanel(suspects, state.voteForensicProfiles, state.voteSceneForensics);
 }
 
 function renderForensicPanel(suspects, profiles, sceneForensics) {
@@ -1765,6 +1823,8 @@ function renderForensicPanel(suspects, profiles, sceneForensics) {
          <span class="fe-value">${escapeHtml(e.value)}</span>
        </div>`
     ).join('');
+  } else if (sceneDiv) {
+    sceneDiv.innerHTML = '<div class="fe-scene-item"><span class="fe-value">No scene forensic evidence available.</span></div>';
   }
 
   // Suspect profiles
@@ -1798,7 +1858,6 @@ function renderForensicPanel(suspects, profiles, sceneForensics) {
   });
 
   panel.style.display = suspects.length > 0 ? 'block' : 'none';
-  startCountdown('vote-timer-text', 'vote-timer-fill', TIMER_VOTE, autoSubmitVote);
 }
 
 function autoSubmitVote() {
@@ -2081,10 +2140,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('input-player-name').value = savedName;
   }
 
-  // Check for a URL invite link (e.g. #join/ABC123) and go straight to name entry
-  const hashMatch = location.hash.slice(1).match(/^join\/([A-Za-z0-9]{4,10})$/);
-  if (hashMatch) {
-    const pendingCode = hashMatch[1].toUpperCase();
+  // Check for a URL invite link and go straight to name entry
+  const pendingCode = getInviteCodeFromUrl();
+  if (pendingCode) {
     // Clear the hash so it doesn't linger after the code is consumed
     history.replaceState(null, '', location.pathname);
     state.roomCode = pendingCode;
@@ -2103,6 +2161,19 @@ document.addEventListener('DOMContentLoaded', () => {
     attemptRejoin(session);
   }
 });
+
+function getInviteCodeFromUrl() {
+  const hashMatch = location.hash.slice(1).match(/^(?:join|host)\/([A-Za-z0-9]{4,10})$/i);
+  if (hashMatch) return hashMatch[1].toUpperCase();
+
+  const params = new URLSearchParams(location.search || '');
+  const queryCode = (params.get('join') || params.get('room') || params.get('code') || '').trim();
+  if (/^[A-Za-z0-9]{4,10}$/.test(queryCode)) return queryCode.toUpperCase();
+
+  const pathMatch = location.pathname.match(/\/(?:join|host)\/([A-Za-z0-9]{4,10})\/?$/i);
+  if (pathMatch) return pathMatch[1].toUpperCase();
+  return null;
+}
 
 function attemptRejoin(session) {
   state.playerName = session.playerName;
