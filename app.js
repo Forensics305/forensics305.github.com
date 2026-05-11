@@ -4,6 +4,7 @@ const MIN_PLAYERS    = 3;
 const MAX_SUSPECTS   = 5;
 const ROOM_CODE_PATTERN = '[A-Za-z0-9]{4,10}';
 const ROOM_CODE_REGEX = new RegExp(`^${ROOM_CODE_PATTERN}$`);
+const EMPTY_SUSPECTS = Object.freeze([]);
 
 // Phase durations (seconds)
 const TIMER_ROLE_REVEAL = 15;
@@ -1755,7 +1756,7 @@ function handleVotePhase(data) {
   if (hostInvBtn) hostInvBtn.style.display = state.isHost ? 'block' : 'none';
 
   renderSuspectPicker();
-  renderForensicPanel([], state.voteForensicProfiles, state.voteSceneForensics);
+  renderForensicPanel(EMPTY_SUSPECTS, state.voteForensicProfiles, state.voteSceneForensics);
   startCountdown('vote-timer-text', 'vote-timer-fill', TIMER_VOTE, autoSubmitVote);
 }
 
@@ -1816,7 +1817,7 @@ function updateSuspectPickerUI() {
     statusEl.textContent = `Pick ${needed} more suspect${needed === 1 ? '' : 's'} to compare.`;
     showBtn.disabled = true;
     if (state.forensicPanelVisible) {
-      renderForensicPanel([], state.voteForensicProfiles, state.voteSceneForensics);
+      renderForensicPanel(EMPTY_SUSPECTS, state.voteForensicProfiles, state.voteSceneForensics);
       state.forensicPanelVisible = false;
     }
   }
@@ -1879,7 +1880,7 @@ function renderForensicPanel(suspects, profiles, sceneForensics) {
     suspList.appendChild(card);
   });
 
-  panel.style.display = suspects.length > 0 ? 'block' : 'none';
+  panel.style.display = suspects.length === 2 ? 'block' : 'none';
 }
 
 function autoSubmitVote() {
