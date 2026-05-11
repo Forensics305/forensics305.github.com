@@ -2,6 +2,8 @@
 const MURDER_BUDGET  = 25;
 const MIN_PLAYERS    = 3;
 const MAX_SUSPECTS   = 5;
+const ROOM_CODE_PATTERN = '[A-Za-z0-9]{4,10}';
+const ROOM_CODE_REGEX = new RegExp(`^${ROOM_CODE_PATTERN}$`);
 
 // Phase durations (seconds)
 const TIMER_ROLE_REVEAL = 15;
@@ -164,6 +166,7 @@ let state = {
   voteAlivePlayers: [],
   voteForensicProfiles: {},
   voteSceneForensics: [],
+  forensicPanelVisible: false,
 
   // alibis
   alibis:          {},        // host: {round: {playerId: alibiText}}
@@ -1731,6 +1734,7 @@ function handleVotePhase(data) {
   state.voteAlivePlayers = data.alivePlayers || [];
   state.voteForensicProfiles = data.forensicProfiles || {};
   state.voteSceneForensics = data.sceneForensics || [];
+  state.forensicPanelVisible = false;
   const total = data.totalVoters || data.alivePlayers.length;
   document.getElementById('vote-status').textContent = `Waiting for votes (0 / ${total})…`;
 
@@ -1766,8 +1770,17 @@ function renderSuspectPicker() {
     const el = document.createElement('div');
     el.className = 'option-item';
     el.dataset.id = p.id;
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-pressed', 'false');
     el.textContent = p.name + (p.id === state.playerId ? ' (You)' : '');
     el.onclick = () => toggleSuspectPick(p.id);
+    el.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleSuspectPick(p.id);
+      }
+    };
     picksDiv.appendChild(el);
   });
   updateSuspectPickerUI();
@@ -1790,7 +1803,9 @@ function updateSuspectPickerUI() {
   if (!picksDiv || !statusEl || !showBtn) return;
 
   Array.from(picksDiv.children).forEach(el => {
-    el.classList.toggle('selected', state.selectedSuspects.includes(el.dataset.id));
+    const selected = state.selectedSuspects.includes(el.dataset.id);
+    el.classList.toggle('selected', selected);
+    el.setAttribute('aria-pressed', selected ? 'true' : 'false');
   });
 
   if (state.selectedSuspects.length === 2) {
@@ -1800,7 +1815,10 @@ function updateSuspectPickerUI() {
     const needed = 2 - state.selectedSuspects.length;
     statusEl.textContent = `Pick ${needed} more suspect${needed === 1 ? '' : 's'} to compare.`;
     showBtn.disabled = true;
-    renderForensicPanel([], state.voteForensicProfiles, state.voteSceneForensics);
+    if (state.forensicPanelVisible) {
+      renderForensicPanel([], state.voteForensicProfiles, state.voteSceneForensics);
+      state.forensicPanelVisible = false;
+    }
   }
 }
 
@@ -1808,6 +1826,7 @@ function showSelectedForensics() {
   if (state.selectedSuspects.length !== 2) return;
   const suspects = state.voteAlivePlayers.filter(p => state.selectedSuspects.includes(p.id));
   renderForensicPanel(suspects, state.voteForensicProfiles, state.voteSceneForensics);
+  state.forensicPanelVisible = true;
 }
 
 function renderForensicPanel(suspects, profiles, sceneForensics) {
@@ -2166,14 +2185,14 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function getInviteCodeFromUrl() {
-  const hashMatch = location.hash.slice(1).match(/^(?:join|host)\/([A-Za-z0-9]{4,10})$/i);
+  const hashMatch = location.hash.slice(1).match(new RegExp(`^(?:join|host)/(${ROOM_CODE_PATTERN})$`, 'i'));
   if (hashMatch) return hashMatch[1].toUpperCase();
 
   const params = new URLSearchParams(location.search || '');
   const queryCode = (params.get('join') || params.get('room') || params.get('code') || '').trim();
-  if (/^[A-Za-z0-9]{4,10}$/.test(queryCode)) return queryCode.toUpperCase();
+  if (ROOM_CODE_REGEX.test(queryCode)) return queryCode.toUpperCase();
 
-  const pathMatch = location.pathname.match(/\/(?:join|host)\/([A-Za-z0-9]{4,10})\/?$/i);
+  const pathMatch = location.pathname.match(new RegExp(`/(?:join|host)/(${ROOM_CODE_PATTERN})/?$`, 'i'));
   if (pathMatch) return pathMatch[1].toUpperCase();
   return null;
 }
