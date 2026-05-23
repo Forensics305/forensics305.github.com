@@ -75,6 +75,7 @@ function ensureQrLibrary() {
           console.warn('QR fallback load failed:', err);
         }
       }
+      _qrLibraryPromise = null;
       return false;
     })();
   }
