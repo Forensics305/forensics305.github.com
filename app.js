@@ -30,6 +30,12 @@ const FALLBACK_ICE_SERVERS = [
 
 // Cached promise so the fetch happens at most once per page load.
 let _iceConfigPromise = null;
+let _qrLibraryPromise = null;
+
+const QR_SCRIPT_FALLBACKS = [
+  'https://unpkg.com/qrcode@1.5.4/build/qrcode.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.4/qrcode.min.js',
+];
 
 function getIceConfig() {
   if (!_iceConfigPromise) {
@@ -42,6 +48,37 @@ function getIceConfig() {
       });
   }
   return _iceConfigPromise;
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error(`Could not load script: ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+function ensureQrLibrary() {
+  if (window.QRCode && typeof window.QRCode.toCanvas === 'function') {
+    return Promise.resolve(true);
+  }
+  if (!_qrLibraryPromise) {
+    _qrLibraryPromise = (async () => {
+      for (const src of QR_SCRIPT_FALLBACKS) {
+        try {
+          await loadScript(src);
+          if (window.QRCode && typeof window.QRCode.toCanvas === 'function') return true;
+        } catch (err) {
+          console.warn('QR fallback load failed:', err);
+        }
+      }
+      return false;
+    })();
+  }
+  return _qrLibraryPromise;
 }
 
 const METHODS = [
@@ -557,10 +594,6 @@ function getRoomInviteUrl(code) {
   return location.origin + location.pathname + '#join/' + code;
 }
 
-function getRoomInviteUrl(code) {
-  return `https://www.thinlines.live/#join/${code}`;
-}
-
 function renderHostJoinQr() {
   const canvas = document.getElementById('host-join-qr');
   const fallback = document.getElementById('host-join-qr-fallback');
@@ -577,38 +610,39 @@ function renderHostJoinQr() {
   }
 
   const joinUrl = getRoomInviteUrl(code);
-
-  if (!window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
-    canvas.style.display = 'none';
-    if (fallback) {
-      fallback.textContent = 'QR code unavailable. Use copy link instead.';
-      fallback.style.display = 'block';
-    }
-    return;
-  }
-
-  window.QRCode.toCanvas(
-    canvas,
-    joinUrl,
-    {
-      width: 180,
-      margin: 1,
-      color: { dark: '#f5d67a', light: '#0f0f0f' },
-    },
-    err => {
-      if (err) {
-        console.error('QR render failed:', err);
-        canvas.style.display = 'none';
-        if (fallback) {
-          fallback.textContent = 'QR code unavailable. Use copy link instead.';
-          fallback.style.display = 'block';
-        }
-        return;
+  ensureQrLibrary().then(isReady => {
+    if (!isReady || !window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
+      canvas.style.display = 'none';
+      if (fallback) {
+        fallback.textContent = 'QR code unavailable. Use copy link instead.';
+        fallback.style.display = 'block';
       }
-      canvas.style.display = 'block';
-      if (fallback) fallback.style.display = 'none';
+      return;
     }
-  );
+
+    window.QRCode.toCanvas(
+      canvas,
+      joinUrl,
+      {
+        width: 180,
+        margin: 1,
+        color: { dark: '#111111', light: '#ffffff' },
+      },
+      err => {
+        if (err) {
+          console.error('QR render failed:', err);
+          canvas.style.display = 'none';
+          if (fallback) {
+            fallback.textContent = 'QR code unavailable. Use copy link instead.';
+            fallback.style.display = 'block';
+          }
+          return;
+        }
+        canvas.style.display = 'block';
+        if (fallback) fallback.style.display = 'none';
+      }
+    );
+  });
 }
 
 // Show the observer-host game board with an optional status message and phase timer.
