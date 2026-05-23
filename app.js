@@ -557,6 +557,10 @@ function getRoomInviteUrl(code) {
   return location.origin + location.pathname + '#join/' + code;
 }
 
+function getRoomInviteUrl(code) {
+  return `https://www.thinlines.live/#join/${code}`;
+}
+
 function renderHostJoinQr() {
   const canvas = document.getElementById('host-join-qr');
   const fallback = document.getElementById('host-join-qr-fallback');
@@ -573,6 +577,7 @@ function renderHostJoinQr() {
   }
 
   const joinUrl = getRoomInviteUrl(code);
+
   if (!window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
     canvas.style.display = 'none';
     if (fallback) {
