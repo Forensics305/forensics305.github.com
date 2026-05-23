@@ -470,6 +470,7 @@ function initHostPeer() {
   state.roomCode = code;
   showScreen('screen-host-lobby');
   document.getElementById('display-room-code').textContent = code;
+  renderHostJoinQr();
 
   getIceConfig().then(peerConfig => {
     state.peer = new Peer('tl-' + code, peerConfig);
@@ -542,7 +543,7 @@ function kickPlayer(playerId) {
 function copyRoomCode(btnEl) {
   const code = state.roomCode;
   const btn = btnEl || document.querySelector('#screen-host-lobby .btn-copy');
-  const joinUrl = location.origin + location.pathname + '#join/' + code;
+  const joinUrl = getRoomInviteUrl(code);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(joinUrl).then(() => {
       if (btn) { const orig = btn.textContent; btn.textContent = '✓ Copied!'; setTimeout(() => { btn.textContent = orig; }, 2000); }
@@ -550,6 +551,59 @@ function copyRoomCode(btnEl) {
   } else {
     prompt('Copy this invite link:', joinUrl);
   }
+}
+
+function getRoomInviteUrl(code) {
+  return location.origin + location.pathname + '#join/' + code;
+}
+
+function renderHostJoinQr() {
+  const canvas = document.getElementById('host-join-qr');
+  const fallback = document.getElementById('host-join-qr-fallback');
+  if (!canvas) return;
+
+  const code = state.roomCode;
+  if (!code) {
+    canvas.style.display = 'none';
+    if (fallback) {
+      fallback.textContent = 'QR code unavailable. Use copy link instead.';
+      fallback.style.display = 'block';
+    }
+    return;
+  }
+
+  const joinUrl = getRoomInviteUrl(code);
+  if (!window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
+    canvas.style.display = 'none';
+    if (fallback) {
+      fallback.textContent = 'QR code unavailable. Use copy link instead.';
+      fallback.style.display = 'block';
+    }
+    return;
+  }
+
+  window.QRCode.toCanvas(
+    canvas,
+    joinUrl,
+    {
+      width: 180,
+      margin: 1,
+      color: { dark: '#f5d67a', light: '#0f0f0f' },
+    },
+    err => {
+      if (err) {
+        console.error('QR render failed:', err);
+        canvas.style.display = 'none';
+        if (fallback) {
+          fallback.textContent = 'QR code unavailable. Use copy link instead.';
+          fallback.style.display = 'block';
+        }
+        return;
+      }
+      canvas.style.display = 'block';
+      if (fallback) fallback.style.display = 'none';
+    }
+  );
 }
 
 // Show the observer-host game board with an optional status message and phase timer.

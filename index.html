@@ -72,6 +72,11 @@
         <span class="room-code" id="display-room-code">------</span>
         <button class="btn btn-sm btn-copy" onclick="copyRoomCode(this)">🔗 Copy Link</button>
       </div>
+      <div class="room-qr-box">
+        <span class="room-code-label">Scan to Join</span>
+        <canvas id="host-join-qr" width="180" height="180" aria-label="QR code to join room"></canvas>
+        <p class="hint-text room-qr-hint" id="host-join-qr-fallback" style="display:none"></p>
+      </div>
       <div class="player-count-bar">Players Online: <strong id="host-player-count">1</strong></div>
       <div id="host-player-list" class="player-list"></div>
       <div class="host-mode-toggle">
@@ -365,6 +370,7 @@
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
