@@ -222,6 +222,7 @@ input::placeholder { color: var(--text-muted); }
   height: 180px;
   max-width: 100%;
   border-radius: 6px;
+  object-fit: contain;
 }
 .room-qr-hint {
   margin: 0;
@@ -860,6 +861,24 @@ textarea.alibi-input::placeholder { color: var(--text-muted); }
   line-height: 1.5;
 }
 .alibi-empty { color: var(--text-muted); font-style: italic; }
+.alibi-partner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  background: rgba(200,168,75,0.08);
+  border: 1px solid rgba(200,168,75,0.2);
+  border-radius: 4px;
+  padding: 0.1rem 0.45rem;
+  font-style: italic;
+}
+.alibi-partner-heading {
+  margin-top: 0.25rem;
+}
+#alibi-partner-options {
+  margin-top: 0.25rem;
+}
 
 /* PHASE TIMERS */
 .phase-timer-block {

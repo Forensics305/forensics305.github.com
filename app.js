@@ -62,7 +62,7 @@ function loadScript(src) {
 }
 
 function ensureQrLibrary() {
-  if (window.QRCode && typeof window.QRCode.toCanvas === 'function') {
+  if (window.QRCode && typeof window.QRCode.toDataURL === 'function') {
     return Promise.resolve(true);
   }
   if (!_qrLibraryPromise) {
@@ -70,7 +70,7 @@ function ensureQrLibrary() {
       for (const src of QR_SCRIPT_FALLBACKS) {
         try {
           await loadScript(src);
-          if (window.QRCode && typeof window.QRCode.toCanvas === 'function') return true;
+          if (window.QRCode && typeof window.QRCode.toDataURL === 'function') return true;
         } catch (err) {
           console.warn('QR fallback load failed:', err);
         }
@@ -218,6 +218,7 @@ let state = {
   pendingElimination:  null,   // {id, name} of player to eliminate at start of next round
   // per-round alibi tracking
   alibiSubmitted:  false,
+  selectedAlibiPartner: null,
 
   // skip-discussion votes (host only, reset each discussion)
   skipVotes:       [],
@@ -596,13 +597,13 @@ function getRoomInviteUrl(code) {
 }
 
 function renderHostJoinQr() {
-  const canvas = document.getElementById('host-join-qr');
+  const imgEl = document.getElementById('host-join-qr');
   const fallback = document.getElementById('host-join-qr-fallback');
-  if (!canvas) return;
+  if (!imgEl) return;
 
   const code = state.roomCode;
   if (!code) {
-    canvas.style.display = 'none';
+    imgEl.style.display = 'none';
     if (fallback) {
       fallback.textContent = 'QR code unavailable. Use copy link instead.';
       fallback.style.display = 'block';
@@ -612,8 +613,8 @@ function renderHostJoinQr() {
 
   const joinUrl = getRoomInviteUrl(code);
   ensureQrLibrary().then(isReady => {
-    if (!isReady || !window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
-      canvas.style.display = 'none';
+    if (!isReady || !window.QRCode || typeof window.QRCode.toDataURL !== 'function') {
+      imgEl.style.display = 'none';
       if (fallback) {
         fallback.textContent = 'QR code unavailable. Use copy link instead.';
         fallback.style.display = 'block';
@@ -621,25 +622,25 @@ function renderHostJoinQr() {
       return;
     }
 
-    window.QRCode.toCanvas(
-      canvas,
+    window.QRCode.toDataURL(
       joinUrl,
       {
         width: 180,
         margin: 1,
         color: { dark: '#111111', light: '#ffffff' },
       },
-      err => {
+      (err, dataUrl) => {
         if (err) {
           console.error('QR render failed:', err);
-          canvas.style.display = 'none';
+          imgEl.style.display = 'none';
           if (fallback) {
             fallback.textContent = 'QR code unavailable. Use copy link instead.';
             fallback.style.display = 'block';
           }
           return;
         }
-        canvas.style.display = 'block';
+        imgEl.src = dataUrl;
+        imgEl.style.display = 'block';
         if (fallback) fallback.style.display = 'none';
       }
     );
@@ -695,12 +696,16 @@ function refreshHostBoard() {
   if (alibisSection && alibisList) {
     const allAlibis = [];
     Object.entries(state.alibis).forEach(([round, roundAlibis]) => {
-      Object.entries(roundAlibis).forEach(([pid, text]) => {
+      Object.entries(roundAlibis).forEach(([pid, entry]) => {
         const player = state.players.find(p => p.id === pid);
+        const text = typeof entry === 'string' ? entry : (entry && entry.text) || '';
+        const partnerId = (entry && typeof entry === 'object') ? entry.partnerId : null;
+        const partner = partnerId ? state.players.find(p => p.id === partnerId) : null;
         allAlibis.push({
-          round:      Number(round),
-          playerName: player ? player.name : 'Unknown',
-          alibi:      text,
+          round:       Number(round),
+          playerName:  player ? player.name : 'Unknown',
+          alibi:       text,
+          partnerName: partner ? partner.name : null,
         });
       });
     });
@@ -711,8 +716,12 @@ function refreshHostBoard() {
         const alibiContent = a.alibi
           ? `<span class="alibi-text">${escapeHtml(a.alibi)}</span>`
           : `<em class="alibi-empty alibi-text">No alibi provided.</em>`;
+        const partnerLine = a.partnerName
+          ? `<span class="alibi-partner-badge">🤝 with ${escapeHtml(a.partnerName)}</span>`
+          : '';
         return `<div class="alibi-item">
            <span class="alibi-player">${escapeHtml(a.playerName)} <span class="alibi-round-tag">Rd ${a.round}</span></span>
+           ${partnerLine}
            ${alibiContent}
          </div>`;
       }).join('');
@@ -1597,6 +1606,7 @@ function handleAlibiPhase(data) {
 
   showScreen('screen-alibi');
   state.alibiSubmitted = false;
+  state.selectedAlibiPartner = null;
   const alibiInput = document.getElementById('input-alibi');
   if (alibiInput) alibiInput.value = '';
   const alibiStatus = document.getElementById('alibi-status');
@@ -1604,7 +1614,34 @@ function handleAlibiPhase(data) {
   const btn = document.getElementById('btn-submit-alibi');
   if (btn) btn.disabled = false;
 
+  // Render alibi partner options (all alive players except self)
+  const partnerDiv = document.getElementById('alibi-partner-options');
+  if (partnerDiv) {
+    partnerDiv.innerHTML = '';
+    const alivePlayers = (data.alivePlayers || []).filter(p => p.id !== state.playerId);
+    alivePlayers.forEach(p => {
+      const el = document.createElement('div');
+      el.className = 'option-item';
+      el.dataset.id = p.id;
+      el.textContent = p.name;
+      el.onclick = () => selectAlibiPartner(p.id, el);
+      partnerDiv.appendChild(el);
+    });
+  }
+
   startCountdown('alibi-timer-text', 'alibi-timer-fill', TIMER_ALIBI, autoSubmitAlibi);
+}
+
+function selectAlibiPartner(id, el) {
+  // Toggle: clicking the same player again deselects
+  if (state.selectedAlibiPartner === id) {
+    state.selectedAlibiPartner = null;
+    el.classList.remove('selected');
+  } else {
+    state.selectedAlibiPartner = id;
+    document.querySelectorAll('#alibi-partner-options .option-item').forEach(b => b.classList.remove('selected'));
+    el.classList.add('selected');
+  }
 }
 
 function submitAlibi() {
@@ -1620,7 +1657,7 @@ function submitAlibi() {
   const alibiStatus = document.getElementById('alibi-status');
   if (alibiStatus) alibiStatus.textContent = 'Alibi submitted! Waiting for others…';
 
-  const msg = { type: 'alibi_submitted', playerId: state.playerId, alibi, round: state.currentRound };
+  const msg = { type: 'alibi_submitted', playerId: state.playerId, alibi, partnerId: state.selectedAlibiPartner, round: state.currentRound };
   if (state.isHost) {
     recordAlibi(msg);
   } else {
@@ -1636,7 +1673,7 @@ function recordAlibi(data) {
   if (!state.isHost) return;
   if (state.gameStatus !== 'alibi') return;
   if (!state.alibis[data.round]) state.alibis[data.round] = {};
-  state.alibis[data.round][data.playerId] = data.alibi;
+  state.alibis[data.round][data.playerId] = { text: data.alibi || '', partnerId: data.partnerId || null };
 
   if (!state.hostPlaying) refreshHostBoard();
 
@@ -1657,11 +1694,18 @@ function hostStartDiscussion() {
 
   const allPlayers  = publicPlayerList();
   const roundAlibis = state.alibis[state.currentRound] || {};
-  const alibis      = Object.entries(roundAlibis).map(([pid, text]) => ({
-    playerId:   pid,
-    playerName: (state.players.find(p => p.id === pid) || {}).name || 'Unknown',
-    alibi:      text,
-  }));
+  const alibis      = Object.entries(roundAlibis).map(([pid, entry]) => {
+    const text = typeof entry === 'string' ? entry : (entry && entry.text) || '';
+    const partnerId = (entry && typeof entry === 'object') ? entry.partnerId : null;
+    const partner = partnerId ? state.players.find(p => p.id === partnerId) : null;
+    return {
+      playerId:    pid,
+      playerName:  (state.players.find(p => p.id === pid) || {}).name || 'Unknown',
+      alibi:       text,
+      partnerId,
+      partnerName: partner ? partner.name : null,
+    };
+  });
 
   state.skipVotes = [];
 
@@ -1707,8 +1751,12 @@ function handleDiscussion(data) {
         const alibiContent = a.alibi
           ? `<span class="alibi-text">${escapeHtml(a.alibi)}</span>`
           : `<em class="alibi-empty alibi-text">No alibi provided.</em>`;
+        const partnerLine = a.partnerName
+          ? `<span class="alibi-partner-badge">🤝 with ${escapeHtml(a.partnerName)}</span>`
+          : '';
         return `<div class="alibi-item">
            <span class="alibi-player">${escapeHtml(a.playerName)}</span>
+           ${partnerLine}
            ${alibiContent}
          </div>`;
       }).join('');
@@ -2065,11 +2113,18 @@ function tallyVotes(round) {
   }
 
   const roundAlibis = state.alibis[round] || {};
-  const alibis = Object.entries(roundAlibis).map(([pid, text]) => ({
-    playerId:   pid,
-    playerName: (state.players.find(p => p.id === pid) || {}).name || 'Unknown',
-    alibi:      text,
-  }));
+  const alibis = Object.entries(roundAlibis).map(([pid, entry]) => {
+    const text = typeof entry === 'string' ? entry : (entry && entry.text) || '';
+    const partnerId = (entry && typeof entry === 'object') ? entry.partnerId : null;
+    const partner = partnerId ? state.players.find(p => p.id === partnerId) : null;
+    return {
+      playerId:    pid,
+      playerName:  (state.players.find(p => p.id === pid) || {}).name || 'Unknown',
+      alibi:       text,
+      partnerId,
+      partnerName: partner ? partner.name : null,
+    };
+  });
 
   // Determine who gets eliminated when murderer escapes
   // Only alive non-murderer players can be eliminated
@@ -2108,8 +2163,12 @@ function handleRoundResults(data) {
       const alibiContent = a.alibi
         ? `<span class="alibi-text">${escapeHtml(a.alibi)}</span>`
         : `<em class="alibi-empty alibi-text">No alibi provided.</em>`;
+      const partnerLine = a.partnerName
+        ? `<span class="alibi-partner-badge">🤝 with ${escapeHtml(a.partnerName)}</span>`
+        : '';
       return `<div class="alibi-item">
          <span class="alibi-player">${escapeHtml(a.playerName)}</span>
+         ${partnerLine}
          ${alibiContent}
        </div>`;
     }).join('');
