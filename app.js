@@ -698,8 +698,7 @@ function refreshHostBoard() {
     Object.entries(state.alibis).forEach(([round, roundAlibis]) => {
       Object.entries(roundAlibis).forEach(([pid, entry]) => {
         const player = state.players.find(p => p.id === pid);
-        const text = typeof entry === 'string' ? entry : (entry && entry.text) || '';
-        const partnerId = (entry && typeof entry === 'object') ? entry.partnerId : null;
+        const { text, partnerId } = normalizeAlibiEntry(entry);
         const partner = partnerId ? state.players.find(p => p.id === partnerId) : null;
         allAlibis.push({
           round:       Number(round),
@@ -1618,7 +1617,8 @@ function handleAlibiPhase(data) {
   const partnerDiv = document.getElementById('alibi-partner-options');
   if (partnerDiv) {
     partnerDiv.innerHTML = '';
-    const alivePlayers = (data.alivePlayers || []).filter(p => p.id !== state.playerId);
+    const alivePlayers = ((data && data.alivePlayers) || state.players.filter(p => p.isAlive))
+      .filter(p => p.id !== state.playerId);
     alivePlayers.forEach(p => {
       const el = document.createElement('div');
       el.className = 'option-item';
@@ -1669,6 +1669,16 @@ function autoSubmitAlibi() {
   if (!state.alibiSubmitted) submitAlibi();
 }
 
+/**
+ * Normalise an alibi store entry (which may be a legacy plain string or a
+ * {text, partnerId} object) into a consistent {text, partnerId} shape.
+ */
+function normalizeAlibiEntry(entry) {
+  if (typeof entry === 'string') return { text: entry, partnerId: null };
+  if (entry && typeof entry === 'object') return { text: entry.text || '', partnerId: entry.partnerId || null };
+  return { text: '', partnerId: null };
+}
+
 function recordAlibi(data) {
   if (!state.isHost) return;
   if (state.gameStatus !== 'alibi') return;
@@ -1695,8 +1705,7 @@ function hostStartDiscussion() {
   const allPlayers  = publicPlayerList();
   const roundAlibis = state.alibis[state.currentRound] || {};
   const alibis      = Object.entries(roundAlibis).map(([pid, entry]) => {
-    const text = typeof entry === 'string' ? entry : (entry && entry.text) || '';
-    const partnerId = (entry && typeof entry === 'object') ? entry.partnerId : null;
+    const { text, partnerId } = normalizeAlibiEntry(entry);
     const partner = partnerId ? state.players.find(p => p.id === partnerId) : null;
     return {
       playerId:    pid,
@@ -2114,8 +2123,7 @@ function tallyVotes(round) {
 
   const roundAlibis = state.alibis[round] || {};
   const alibis = Object.entries(roundAlibis).map(([pid, entry]) => {
-    const text = typeof entry === 'string' ? entry : (entry && entry.text) || '';
-    const partnerId = (entry && typeof entry === 'object') ? entry.partnerId : null;
+    const { text, partnerId } = normalizeAlibiEntry(entry);
     const partner = partnerId ? state.players.find(p => p.id === partnerId) : null;
     return {
       playerId:    pid,
