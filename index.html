@@ -74,7 +74,7 @@
       </div>
       <div class="room-qr-box">
         <span class="room-code-label">Scan to Join</span>
-        <canvas id="host-join-qr" width="180" height="180" aria-label="QR code to join room"></canvas>
+        <img id="host-join-qr" alt="QR code to join room" />
         <p class="hint-text room-qr-hint" id="host-join-qr-fallback" style="display:none"></p>
       </div>
       <div class="player-count-bar">Players Online: <strong id="host-player-count">1</strong></div>
@@ -265,6 +265,10 @@
         <div class="timer-text" id="alibi-timer-text">1:00</div>
       </div>
       <p class="section-hint">State where you were when the murder occurred. Everyone will see your alibi.</p>
+      <div id="alibi-partner-section">
+        <p class="section-hint alibi-partner-heading">🤝 Who were you with? <em>(optional — pick a witness to your whereabouts)</em></p>
+        <div id="alibi-partner-options" class="option-grid"></div>
+      </div>
       <textarea id="input-alibi" class="alibi-input" maxlength="150" placeholder="Where were you? What were you doing?…"></textarea>
       <button class="btn btn-primary" id="btn-submit-alibi" onclick="submitAlibi()">Submit Alibi</button>
       <p class="status-text" id="alibi-status"></p>
