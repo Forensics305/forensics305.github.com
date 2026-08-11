@@ -1042,12 +1042,12 @@ function handleMessage(data, senderConn) {
       break;
 
     case 'start_vote':
-      handleVotePhase(data);
+      handleStartVoting(data);
       break;
 
     case 'start_voting':
       // Legacy — kept for safety but not sent by current code
-      handleVotePhase(data);
+      handleStartVoting(data);
       break;
 
     case 'vote_update':
@@ -1788,7 +1788,9 @@ function handleDiscussion(data) {
   if (hostDiscBtn) hostDiscBtn.style.display = state.isHost ? 'block' : 'none';
 
   startCountdown('disc-timer-text', 'disc-timer-fill', TIMER_DISCUSSION, () => {
-    if (state.gameStatus === 'discussion') hostStartVote();
+    // Only the host should advance the game when the discussion timer expires.
+    // Non-host clients just let the countdown display expire without taking action.
+    if (state.isHost && state.gameStatus === 'discussion') hostStartVote();
   });
 }
 
@@ -1845,7 +1847,12 @@ function hostStartVote() {
   const alive = publicPlayerList()
     .filter(p => p.isAlive && (state.hostPlaying || !p.isHost));
 
-  const msg = { type: 'start_vote', alivePlayers: alive, round: state.currentRound, totalVoters: alive.length };
+  // Include forensic profiles and the current round's scene forensics so
+  // clients can use the forensic comparison panel during the vote.
+  const currentMurder = state.murders[state.murders.length - 1];
+  const sceneForensics = (currentMurder && currentMurder.sceneForensics) ? currentMurder.sceneForensics : [];
+
+  const msg = { type: 'start_vote', alivePlayers: alive, round: state.currentRound, totalVoters: alive.length, forensicProfiles: state.forensicProfiles, sceneForensics };
   broadcastToAll(msg);
   handleVotePhase(msg);
 
@@ -1884,7 +1891,9 @@ function handleVotePhase(data) {
   state.myVote = null;
   state.selectedSuspects = [];
   state.voteAlivePlayers = data.alivePlayers || [];
-  state.voteForensicProfiles = data.forensicProfiles || {};
+  // Fall back to locally-stored profiles (sent at game start) when the
+  // vote message does not include them (e.g. older host versions).
+  state.voteForensicProfiles = data.forensicProfiles || state.forensicProfiles || {};
   state.voteSceneForensics = data.sceneForensics || [];
   state.forensicPanelVisible = false;
   const total = data.totalVoters || data.alivePlayers.length;
