@@ -31,11 +31,18 @@ const FALLBACK_ICE_SERVERS = [
 // Cached promise so the fetch happens at most once per page load.
 let _iceConfigPromise = null;
 let _qrLibraryPromise = null;
+let _googleIdentityPromise = null;
 
 const QR_SCRIPT_FALLBACKS = [
   'https://unpkg.com/qrcode@1.5.4/build/qrcode.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.4/qrcode.min.js',
 ];
+const GOOGLE_IDENTITY_SCRIPT = 'https://accounts.google.com/gsi/client';
+const GOOGLE_CLASSROOM_SCOPES = [
+  'https://www.googleapis.com/auth/classroom.courses.readonly',
+  'https://www.googleapis.com/auth/classroom.announcements',
+].join(' ');
+const GOOGLE_CLIENT_ID_PLACEHOLDER = 'YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com';
 
 function getIceConfig() {
   if (!_iceConfigPromise) {
@@ -80,6 +87,21 @@ function ensureQrLibrary() {
     })();
   }
   return _qrLibraryPromise;
+}
+
+function ensureGoogleIdentityLibrary() {
+  if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+    return Promise.resolve(true);
+  }
+  if (!_googleIdentityPromise) {
+    _googleIdentityPromise = loadScript(GOOGLE_IDENTITY_SCRIPT)
+      .then(() => !!(window.google && window.google.accounts && window.google.accounts.oauth2))
+      .catch(() => {
+        _googleIdentityPromise = null;
+        return false;
+      });
+  }
+  return _googleIdentityPromise;
 }
 
 const METHODS = [
@@ -225,6 +247,19 @@ let state = {
 
   // pending PeerJS connection verified before name entry (player join flow)
   pendingConn:     null,
+
+  // host invite assets
+  hostInviteUrl:   '',
+  hostInviteQrForUrl: '',
+  hostInviteQrPng: '',
+  hostInviteQrSvg: '',
+
+  // Google Classroom sharing (memory only)
+  classroomAccessToken: null,
+  classroomTokenExpiresAt: 0,
+  classroomCourses: [],
+  classroomAnnouncementDirty: false,
+  classroomLastPrefill: '',
 };
 
 function generateRoomCode() {
@@ -500,7 +535,13 @@ function goBackFromHostLobby() {
   state.players  = [];
   state.isHost   = false;
   state.playerId = '';
+  state.classroomCourses = [];
+  state.classroomAnnouncementDirty = false;
+  state.classroomLastPrefill = '';
+  clearClassroomSession();
   clearSession();
+  renderHostJoinQr();
+  renderClassroomSharePanel();
   showScreen('screen-profile');
 }
 
@@ -510,6 +551,8 @@ function initHostPeer() {
   showScreen('screen-host-lobby');
   document.getElementById('display-room-code').textContent = code;
   renderHostJoinQr();
+  renderClassroomSharePanel();
+  syncClassroomAnnouncementPrefill();
 
   getIceConfig().then(peerConfig => {
     state.peer = new Peer('tl-' + code, peerConfig);
@@ -579,21 +622,143 @@ function kickPlayer(playerId) {
   broadcastToAll({ type: 'player_list', players: publicPlayerList() });
 }
 
-function copyRoomCode(btnEl) {
-  const code = state.roomCode;
+function setLiveStatus(id, message) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = message;
+}
+
+function getRoomInviteUrl(code) {
+  if (!code) return '';
+  return location.origin + location.pathname + location.search + '#join/' + encodeURIComponent(code);
+}
+
+function updateHostInviteUi() {
+  const joinUrl = getRoomInviteUrl(state.roomCode);
+  state.hostInviteUrl = joinUrl;
+
+  const linkInput = document.getElementById('host-join-link');
+  if (linkInput) {
+    linkInput.value = joinUrl;
+    linkInput.placeholder = joinUrl ? '' : 'Create a room to generate a join link.';
+    linkInput.disabled = !joinUrl;
+  }
+
+  ['btn-download-qr-png', 'btn-download-qr-svg'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = !joinUrl;
+  });
+
+  const copyButtons = document.querySelectorAll('.btn-copy');
+  copyButtons.forEach(btn => { btn.disabled = !joinUrl; });
+}
+
+function copyJoinLink(btnEl) {
+  const joinUrl = getRoomInviteUrl(state.roomCode);
   const btn = btnEl || document.querySelector('#screen-host-lobby .btn-copy');
-  const joinUrl = getRoomInviteUrl(code);
+  if (!joinUrl) {
+    setLiveStatus('host-join-status', 'Create a room first, then copy the join link.');
+    return;
+  }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(joinUrl).then(() => {
+      setLiveStatus('host-join-status', 'Join link copied to your clipboard.');
       if (btn) { const orig = btn.textContent; btn.textContent = '✓ Copied!'; setTimeout(() => { btn.textContent = orig; }, 2000); }
-    }).catch(() => { prompt('Copy this invite link:', joinUrl); });
+    }).catch(() => {
+      setLiveStatus('host-join-status', 'Clipboard access was blocked. Copy the join link from the field below.');
+      prompt('Copy this invite link:', joinUrl);
+    });
   } else {
+    setLiveStatus('host-join-status', 'Clipboard access is unavailable. Copy the join link from the field below.');
     prompt('Copy this invite link:', joinUrl);
   }
 }
 
-function getRoomInviteUrl(code) {
-  return location.origin + location.pathname + '#join/' + code;
+function copyRoomCode(btnEl) {
+  copyJoinLink(btnEl);
+}
+
+function downloadTextFile(filename, mimeType, content) {
+  if (!content) return false;
+  const blob = new Blob([content], { type: mimeType });
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  return true;
+}
+
+function downloadJoinQr(format, btnEl) {
+  const joinUrl = getRoomInviteUrl(state.roomCode);
+  if (!joinUrl) {
+    setLiveStatus('host-join-status', 'Create a room first, then download the join QR code.');
+    return;
+  }
+
+  const btn = btnEl || null;
+  const originalText = btn ? btn.textContent : '';
+  if (btn) btn.disabled = true;
+
+  const filenameBase = `thin-lines-${state.roomCode.toLowerCase()}-join`;
+  const finish = message => {
+    setLiveStatus('host-join-status', message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  };
+
+  if (format === 'png') {
+    if (!state.hostInviteQrPng) {
+      finish('The PNG QR code is not ready yet. Wait for it to finish generating, then try again.');
+      return;
+    }
+    const anchor = document.createElement('a');
+    anchor.href = state.hostInviteQrPng;
+    anchor.download = `${filenameBase}.png`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    finish('PNG QR code downloaded.');
+    return;
+  }
+
+  if (format === 'svg') {
+    if (state.hostInviteQrSvg) {
+      downloadTextFile(`${filenameBase}.svg`, 'image/svg+xml', state.hostInviteQrSvg);
+      finish('SVG QR code downloaded.');
+      return;
+    }
+    ensureQrLibrary().then(isReady => {
+      if (!isReady || !window.QRCode || typeof window.QRCode.toString !== 'function') {
+        finish('SVG download is unavailable in this browser right now. Try the PNG download instead.');
+        return;
+      }
+      window.QRCode.toString(
+        joinUrl,
+        {
+          type: 'svg',
+          margin: 1,
+          color: { dark: '#111111', light: '#ffffff' },
+        },
+        (err, svgString) => {
+          if (err || !svgString) {
+            finish('SVG download failed. Try the PNG download instead.');
+            return;
+          }
+          state.hostInviteQrSvg = svgString;
+          downloadTextFile(`${filenameBase}.svg`, 'image/svg+xml', svgString);
+          finish('SVG QR code downloaded.');
+        }
+      );
+    });
+    return;
+  }
+
+  finish('Unknown QR download format requested.');
 }
 
 function renderHostJoinQr() {
@@ -601,24 +766,45 @@ function renderHostJoinQr() {
   const fallback = document.getElementById('host-join-qr-fallback');
   if (!imgEl) return;
 
+  updateHostInviteUi();
+
   const code = state.roomCode;
   if (!code) {
+    state.hostInviteQrForUrl = '';
+    state.hostInviteQrPng = '';
+    state.hostInviteQrSvg = '';
+    imgEl.removeAttribute('src');
+    imgEl.alt = 'Join QR code unavailable until a room is created';
     imgEl.style.display = 'none';
     if (fallback) {
-      fallback.textContent = 'QR code unavailable. Use copy link instead.';
+      fallback.textContent = 'Create a room to generate a join QR code.';
       fallback.style.display = 'block';
     }
+    setLiveStatus('host-join-status', 'Create a room to generate a join link and QR code.');
     return;
   }
 
   const joinUrl = getRoomInviteUrl(code);
+  imgEl.alt = `QR code for joining room ${code}`;
+  if (state.hostInviteQrForUrl === joinUrl && state.hostInviteQrPng) {
+    imgEl.src = state.hostInviteQrPng;
+    imgEl.style.display = 'block';
+    if (fallback) fallback.style.display = 'none';
+    setLiveStatus('host-join-status', 'Players can scan the QR code or open the join link directly.');
+    return;
+  }
+
+  setLiveStatus('host-join-status', `Generating a join QR code for room ${code}.`);
   ensureQrLibrary().then(isReady => {
     if (!isReady || !window.QRCode || typeof window.QRCode.toDataURL !== 'function') {
+      state.hostInviteQrForUrl = '';
+      state.hostInviteQrPng = '';
       imgEl.style.display = 'none';
       if (fallback) {
-        fallback.textContent = 'QR code unavailable. Use copy link instead.';
+        fallback.textContent = 'QR generation is unavailable in this browser. Use the join link instead.';
         fallback.style.display = 'block';
       }
+      setLiveStatus('host-join-status', 'QR generation is unavailable. Players can still join with the link above.');
       return;
     }
 
@@ -630,20 +816,363 @@ function renderHostJoinQr() {
         color: { dark: '#111111', light: '#ffffff' },
       },
       (err, dataUrl) => {
-        if (err) {
+        if (err || !dataUrl) {
           console.error('QR render failed:', err);
+          state.hostInviteQrForUrl = '';
+          state.hostInviteQrPng = '';
           imgEl.style.display = 'none';
           if (fallback) {
-            fallback.textContent = 'QR code unavailable. Use copy link instead.';
+            fallback.textContent = 'QR generation failed. Use the join link instead.';
             fallback.style.display = 'block';
           }
+          setLiveStatus('host-join-status', 'QR generation failed. Players can still join with the link above.');
           return;
         }
+        state.hostInviteQrForUrl = joinUrl;
+        state.hostInviteQrPng = dataUrl;
+        state.hostInviteQrSvg = '';
         imgEl.src = dataUrl;
         imgEl.style.display = 'block';
         if (fallback) fallback.style.display = 'none';
+        setLiveStatus('host-join-status', 'Players can scan the QR code or open the join link directly.');
       }
     );
+  });
+}
+
+function getGoogleClientId() {
+  const runtimeClientId = window.THIN_LINES_PUBLIC_CONFIG && window.THIN_LINES_PUBLIC_CONFIG.googleClientId;
+  const metaClientId = document.querySelector('meta[name="thin-lines-google-client-id"]');
+  const value = String(runtimeClientId || (metaClientId ? metaClientId.content : '') || '').trim();
+  return value && value !== GOOGLE_CLIENT_ID_PLACEHOLDER ? value : '';
+}
+
+function hasValidClassroomToken() {
+  return !!state.classroomAccessToken && Date.now() < state.classroomTokenExpiresAt;
+}
+
+function clearClassroomSession() {
+  state.classroomAccessToken = null;
+  state.classroomTokenExpiresAt = 0;
+}
+
+function buildClassroomAnnouncementText() {
+  const joinUrl = getRoomInviteUrl(state.roomCode);
+  if (!joinUrl) return '';
+  return `Join my THIN LINES game!\n${joinUrl}\n\nRoom code: ${state.roomCode}`;
+}
+
+function syncClassroomAnnouncementPrefill(force) {
+  const textarea = document.getElementById('classroom-announcement-text');
+  if (!textarea) return;
+  const nextPrefill = buildClassroomAnnouncementText();
+  const currentValue = textarea.value.trim();
+  const canReplace = force || !state.classroomAnnouncementDirty || !currentValue || currentValue === state.classroomLastPrefill;
+  if (canReplace) {
+    textarea.value = nextPrefill;
+    state.classroomAnnouncementDirty = false;
+  }
+  state.classroomLastPrefill = nextPrefill;
+}
+
+function setClassroomStatus(message) {
+  setLiveStatus('classroom-share-status', message);
+}
+
+function getSelectedClassroomCourse() {
+  const select = document.getElementById('classroom-course-select');
+  const courseId = select ? select.value : '';
+  return state.classroomCourses.find(course => course.id === courseId) || null;
+}
+
+function hideClassroomConfirmation() {
+  const confirmPanel = document.getElementById('classroom-confirm-panel');
+  if (confirmPanel) confirmPanel.style.display = 'none';
+}
+
+function renderClassroomSharePanel() {
+  const panel = document.getElementById('classroom-share-panel');
+  const connectBtn = document.getElementById('btn-classroom-auth');
+  const refreshBtn = document.getElementById('btn-classroom-refresh');
+  const reviewBtn = document.getElementById('btn-classroom-review');
+  const courseSelect = document.getElementById('classroom-course-select');
+
+  const clientId = getGoogleClientId();
+  const hasRoom = !!state.roomCode;
+  const isConfigured = !!clientId;
+  const isSignedIn = hasValidClassroomToken();
+
+  if (connectBtn) {
+    connectBtn.disabled = !hasRoom || !isConfigured;
+    connectBtn.textContent = isSignedIn ? '🎓 Refresh Classroom' : '🎓 Connect Classroom';
+  }
+
+  if (panel) panel.style.display = state.classroomCourses.length > 0 ? 'flex' : 'none';
+  if (courseSelect) {
+    courseSelect.disabled = state.classroomCourses.length === 0;
+    const previousValue = courseSelect.value;
+    courseSelect.innerHTML = '<option value="">Select a Google Classroom course…</option>';
+    state.classroomCourses.forEach(course => {
+      const option = document.createElement('option');
+      option.value = course.id;
+      option.textContent = course.name;
+      courseSelect.appendChild(option);
+    });
+    if (state.classroomCourses.some(course => course.id === previousValue)) {
+      courseSelect.value = previousValue;
+    }
+  }
+
+  if (refreshBtn) refreshBtn.disabled = !isConfigured || !hasRoom;
+  if (reviewBtn) reviewBtn.disabled = state.classroomCourses.length === 0;
+
+  if (!hasRoom) {
+    setClassroomStatus('Create a room first, then connect Google Classroom to post the join link.');
+    hideClassroomConfirmation();
+    return;
+  }
+  if (!isConfigured) {
+    setClassroomStatus('Add a public Google OAuth Client ID in the page config before using Google Classroom.');
+    hideClassroomConfirmation();
+    return;
+  }
+  if (!isSignedIn && state.classroomCourses.length === 0) {
+    setClassroomStatus('Connect Google Classroom to choose a course and prepare an announcement.');
+  }
+}
+
+function handleClassroomDraftChange(isAnnouncementEdit) {
+  if (isAnnouncementEdit) state.classroomAnnouncementDirty = true;
+  hideClassroomConfirmation();
+}
+
+function makeClassroomApiError(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
+async function classroomApiRequest(url, options) {
+  if (!hasValidClassroomToken()) {
+    clearClassroomSession();
+    throw makeClassroomApiError(401, 'Your Google Classroom session expired. Sign in again to continue.');
+  }
+
+  const response = await fetch(url, {
+    method: 'GET',
+    ...options,
+    headers: {
+      Authorization: 'Bearer ' + state.classroomAccessToken,
+      ...(options && options.headers ? options.headers : {}),
+    },
+  });
+  const data = await response.json().catch(() => null);
+  if (response.ok) return data;
+
+  if (response.status === 401) {
+    clearClassroomSession();
+    throw makeClassroomApiError(401, 'Your Google Classroom session expired. Sign in again to continue.');
+  }
+  if (response.status === 403) {
+    throw makeClassroomApiError(403, data && data.error && data.error.message
+      ? `Google Classroom denied access: ${data.error.message}`
+      : 'Google Classroom denied access. Make sure the signed-in account is a teacher authorized for this app.');
+  }
+  throw makeClassroomApiError(response.status, data && data.error && data.error.message
+    ? `Google Classroom request failed: ${data.error.message}`
+    : `Google Classroom request failed with status ${response.status}.`);
+}
+
+function requestClassroomAccessToken() {
+  const clientId = getGoogleClientId();
+  if (!clientId) {
+    return Promise.reject(new Error('Google Classroom is not configured with a public OAuth client ID.'));
+  }
+
+  return ensureGoogleIdentityLibrary().then(isReady => {
+    if (!isReady || !window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+      throw new Error('Google Identity Services could not be loaded. Check popup blockers and network access, then try again.');
+    }
+    return new Promise((resolve, reject) => {
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: GOOGLE_CLASSROOM_SCOPES,
+        callback: response => {
+          if (!response || response.error) {
+            const errorCode = response && response.error ? response.error : 'oauth_error';
+            const errorMessage = errorCode === 'access_denied'
+              ? 'Google sign-in was cancelled or access was denied. No announcement was posted.'
+              : `Google sign-in failed: ${errorCode}.`;
+            reject(new Error(errorMessage));
+            return;
+          }
+          resolve(response);
+        },
+        error_callback: error => {
+          const errorType = error && error.type ? error.type : 'oauth_error';
+          if (errorType === 'popup_failed_to_open') {
+            reject(new Error('Google sign-in popup was blocked. Allow popups for this site and try again.'));
+            return;
+          }
+          if (errorType === 'popup_closed') {
+            reject(new Error('Google sign-in was cancelled before completion. No announcement was posted.'));
+            return;
+          }
+          reject(new Error(`Google sign-in failed: ${errorType}.`));
+        },
+      });
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    });
+  });
+}
+
+async function loadClassroomCourses() {
+  let nextPageToken = '';
+  const courses = [];
+
+  do {
+    const params = new URLSearchParams({
+      teacherId: 'me',
+      courseStates: 'ACTIVE',
+      pageSize: '100',
+    });
+    if (nextPageToken) params.set('pageToken', nextPageToken);
+    const data = await classroomApiRequest(`https://classroom.googleapis.com/v1/courses?${params.toString()}`);
+    (data && data.courses ? data.courses : []).forEach(course => {
+      if (course && course.id && course.name) {
+        courses.push({ id: course.id, name: course.name });
+      }
+    });
+    nextPageToken = data && data.nextPageToken ? data.nextPageToken : '';
+  } while (nextPageToken);
+
+  courses.sort((a, b) => a.name.localeCompare(b.name));
+  state.classroomCourses = courses;
+  renderClassroomSharePanel();
+  syncClassroomAnnouncementPrefill();
+
+  const select = document.getElementById('classroom-course-select');
+  if (select && state.classroomCourses.length > 0) select.focus();
+
+  if (state.classroomCourses.length === 0) {
+    setClassroomStatus('No active Google Classroom courses were found where this signed-in user is a teacher.');
+  } else {
+    setClassroomStatus('Choose a course, review the announcement text, then confirm before posting.');
+  }
+}
+
+function withButtonBusyState(btn, busyText, work) {
+  const button = btn || null;
+  const originalText = button ? button.textContent : '';
+  if (button) {
+    button.disabled = true;
+    button.textContent = busyText;
+  }
+  return Promise.resolve()
+    .then(work)
+    .finally(() => {
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    });
+}
+
+function beginClassroomShare(btnEl) {
+  if (!state.roomCode) {
+    renderClassroomSharePanel();
+    return;
+  }
+  withButtonBusyState(btnEl, 'Connecting…', async () => {
+    if (!hasValidClassroomToken()) {
+      setClassroomStatus('Opening Google sign-in…');
+      const tokenResponse = await requestClassroomAccessToken();
+      state.classroomAccessToken = tokenResponse.access_token || null;
+      state.classroomTokenExpiresAt = Date.now() + Math.max(((Number(tokenResponse.expires_in) || 3600) - 60) * 1000, 0);
+    }
+    setClassroomStatus('Loading your Google Classroom courses…');
+    await loadClassroomCourses();
+  }).catch(err => {
+    clearClassroomSession();
+    state.classroomCourses = [];
+    renderClassroomSharePanel();
+    setClassroomStatus(err.message || 'Unable to connect to Google Classroom.');
+  });
+}
+
+function refreshClassroomCourses(btnEl) {
+  withButtonBusyState(btnEl, 'Refreshing…', async () => {
+    if (!hasValidClassroomToken()) {
+      throw new Error('Your Google Classroom session expired. Connect again to refresh your courses.');
+    }
+    setClassroomStatus('Refreshing your Google Classroom courses…');
+    await loadClassroomCourses();
+  }).catch(err => {
+    if (err && err.status === 401) {
+      clearClassroomSession();
+      state.classroomCourses = [];
+      renderClassroomSharePanel();
+    }
+    setClassroomStatus(err.message || 'Unable to refresh Google Classroom courses.');
+  });
+}
+
+function prepareClassroomAnnouncement() {
+  const course = getSelectedClassroomCourse();
+  const textarea = document.getElementById('classroom-announcement-text');
+  const text = textarea ? textarea.value.trim() : '';
+  const summary = document.getElementById('classroom-confirm-summary');
+  const preview = document.getElementById('classroom-confirm-preview');
+  const confirmPanel = document.getElementById('classroom-confirm-panel');
+
+  if (!course) {
+    setClassroomStatus('Choose a Google Classroom course before reviewing the announcement.');
+    return;
+  }
+  if (!text) {
+    setClassroomStatus('Enter announcement text before reviewing the post.');
+    if (textarea) textarea.focus();
+    return;
+  }
+
+  if (summary) summary.textContent = `Ready to post to ${course.name}. Confirm to publish this announcement to the course stream.`;
+  if (preview) preview.textContent = text;
+  if (confirmPanel) confirmPanel.style.display = 'flex';
+  setClassroomStatus('Review the announcement preview, then choose Post Announcement to confirm.');
+}
+
+function cancelClassroomConfirmation() {
+  hideClassroomConfirmation();
+  setClassroomStatus('Announcement review cancelled. Edit the message or course, then review again when ready.');
+}
+
+function postClassroomAnnouncement(btnEl) {
+  const course = getSelectedClassroomCourse();
+  const textarea = document.getElementById('classroom-announcement-text');
+  const text = textarea ? textarea.value.trim() : '';
+  if (!course || !text) {
+    setClassroomStatus('Choose a course and add announcement text before posting.');
+    return;
+  }
+
+  withButtonBusyState(btnEl, 'Posting…', async () => {
+    if (!hasValidClassroomToken()) {
+      throw new Error('Your Google Classroom session expired. Connect again before posting.');
+    }
+    await classroomApiRequest(`https://classroom.googleapis.com/v1/courses/${encodeURIComponent(course.id)}/announcements`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    hideClassroomConfirmation();
+    setClassroomStatus(`Announcement posted to ${course.name}.`);
+  }).catch(err => {
+    if (err && err.status === 401) {
+      clearClassroomSession();
+      state.classroomCourses = [];
+      renderClassroomSharePanel();
+    }
+    setClassroomStatus(err.message || 'Google Classroom could not post the announcement.');
   });
 }
 
@@ -732,6 +1261,9 @@ function refreshHostBoard() {
 }
 
 function renderHostLobby() {
+  renderHostJoinQr();
+  renderClassroomSharePanel();
+  syncClassroomAnnouncementPrefill();
   document.getElementById('host-player-count').textContent = state.players.length;
   const list = document.getElementById('host-player-list');
   list.innerHTML = '';
@@ -2332,6 +2864,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (savedName) {
     document.getElementById('input-player-name').value = savedName;
   }
+
+  renderHostJoinQr();
+  renderClassroomSharePanel();
+  syncClassroomAnnouncementPrefill(true);
 
   // Check for a URL invite link and go straight to name entry
   const pendingCode = getInviteCodeFromUrl();

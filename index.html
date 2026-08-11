@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="thin-lines-google-client-id" content="YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com" />
   <title>THIN LINES</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -70,12 +71,47 @@
       <div class="room-code-box">
         <span class="room-code-label">Room Code</span>
         <span class="room-code" id="display-room-code">------</span>
-        <button class="btn btn-sm btn-copy" onclick="copyRoomCode(this)">🔗 Copy Link</button>
+        <button class="btn btn-sm btn-copy" onclick="copyJoinLink(this)">🔗 Copy Join Link</button>
       </div>
       <div class="room-qr-box">
-        <span class="room-code-label">Scan to Join</span>
-        <img id="host-join-qr" alt="QR code to join room" />
-        <p class="hint-text room-qr-hint" id="host-join-qr-fallback" style="display:none"></p>
+        <span class="room-code-label">Scan or Share to Join</span>
+        <label class="sr-only" for="host-join-link">Join link</label>
+        <input type="text" id="host-join-link" class="invite-link-input" readonly aria-describedby="host-join-status host-join-qr-fallback" />
+        <img id="host-join-qr" alt="Join QR code unavailable until a room is created" />
+        <p class="hint-text room-qr-hint" id="host-join-qr-fallback">Create a room to generate a join QR code.</p>
+        <div class="room-qr-actions" role="group" aria-label="Join link downloads">
+          <button class="btn btn-sm" id="btn-download-qr-png" onclick="downloadJoinQr('png', this)">⬇️ Download PNG</button>
+          <button class="btn btn-sm" id="btn-download-qr-svg" onclick="downloadJoinQr('svg', this)">⬇️ Download SVG</button>
+        </div>
+        <p class="status-text room-qr-status" id="host-join-status" role="status" aria-live="polite">Create a room to generate a join link and QR code.</p>
+      </div>
+      <div class="classroom-share-box" aria-labelledby="classroom-share-heading">
+        <div class="classroom-share-header">
+          <h3 id="classroom-share-heading">Post to Google Classroom</h3>
+          <button class="btn btn-sm" id="btn-classroom-auth" onclick="beginClassroomShare(this)">🎓 Connect Classroom</button>
+        </div>
+        <p class="hint-text classroom-share-hint">Opt in to Google Classroom sharing. Access tokens stay in memory for this tab only.</p>
+        <p class="status-text classroom-share-status" id="classroom-share-status" role="status" aria-live="polite">Add a public Google OAuth Client ID to enable Classroom posting.</p>
+        <div id="classroom-share-panel" class="classroom-share-panel" style="display:none">
+          <label for="classroom-course-select" class="classroom-field-label">Choose a course</label>
+          <select id="classroom-course-select" onchange="handleClassroomDraftChange()">
+            <option value="">Select a Google Classroom course…</option>
+          </select>
+          <label for="classroom-announcement-text" class="classroom-field-label">Announcement text</label>
+          <textarea id="classroom-announcement-text" rows="4" aria-describedby="classroom-share-status" oninput="handleClassroomDraftChange(true)"></textarea>
+          <div class="room-qr-actions" role="group" aria-label="Google Classroom actions">
+            <button class="btn btn-sm" id="btn-classroom-refresh" onclick="refreshClassroomCourses(this)">↻ Refresh Courses</button>
+            <button class="btn btn-sm btn-primary" id="btn-classroom-review" onclick="prepareClassroomAnnouncement()">Review Announcement</button>
+          </div>
+          <div id="classroom-confirm-panel" class="classroom-confirm-panel" style="display:none">
+            <p class="classroom-confirm-copy" id="classroom-confirm-summary"></p>
+            <pre id="classroom-confirm-preview" class="classroom-confirm-preview"></pre>
+            <div class="room-qr-actions" role="group" aria-label="Confirm Google Classroom announcement">
+              <button class="btn btn-sm btn-primary" id="btn-classroom-post" onclick="postClassroomAnnouncement(this)">Post Announcement</button>
+              <button class="btn btn-sm btn-text" onclick="cancelClassroomConfirmation()">Edit Announcement</button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="player-count-bar">Players Online: <strong id="host-player-count">1</strong></div>
       <div id="host-player-list" class="player-list"></div>
@@ -145,7 +181,7 @@
       <div class="room-code-box">
         <span class="room-code-label">Room Code</span>
         <span class="room-code" id="board-room-code">------</span>
-        <button class="btn btn-sm btn-copy" onclick="copyRoomCode(this)">🔗 Copy Link</button>
+        <button class="btn btn-sm btn-copy" onclick="copyJoinLink(this)">🔗 Copy Join Link</button>
       </div>
       <p class="status-text" id="board-status">Please wait…</p>
       <div class="phase-timer-block" id="board-timer-block" style="display:none">
